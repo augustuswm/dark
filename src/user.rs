@@ -4,7 +4,7 @@ use self::sha1::{Sha1, Digest};
 
 use std::collections::HashMap;
 
-use feature_flag::Value;
+use clause::Value;
 
 static LONG_SCALE: u64 = 0xFFFFFFFFFFFFFFF;
 
@@ -114,17 +114,13 @@ pub struct User {
 
 pub struct DerivedAttribute {
     value: Value,
-    LastDerived: u64,
+    last_derived: u64,
 }
 
 impl User {
     pub fn bucket(&self, key: &str, by: &str, salt: &str) -> f64 {
         if let Some(ref val) = self.get_for_eval(by) {
-            let mut source = key.to_string();
-            source.push('.');
-            source.push_str(salt);
-            source.push('.');
-            source.push_str(val);
+            let mut source = [key, salt, val].join(".");
 
             if let Some(ref scnd) = self.builder.secondary {
                 source.push('.');

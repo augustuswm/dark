@@ -1,3 +1,4 @@
+use clause::Clause;
 use user::User;
 
 type Variation = i64;
@@ -78,33 +79,6 @@ struct Rollout {
 struct WeightedVariation {
     pub variation: Variation,
     pub weight: i64,
-}
-
-struct Clause {
-    attribute: String,
-    op: Operator,
-    values: Vec<Value>,
-    negate: bool,
-}
-
-enum Operator {
-    In,
-    EndsWith,
-    StartsWith,
-    Matches,
-    Contains,
-    LessThan,
-    LessThanOrEqual,
-    GreaterThan,
-    GreaterThanOrEqual,
-    Before,
-    After,
-}
-
-pub enum Value {
-    String(String),
-    Number(i64),
-    Boolean(bool),
 }
 
 impl FeatureFlag {}
