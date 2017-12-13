@@ -1,11 +1,16 @@
 use clause::Clause;
+use events::FeatureRequestEvent;
+use store::FeatureStore;
 use user::User;
 
-type Variation = i64;
+pub type Variation = i64;
 
-struct FeatureFlag {
+pub type FlagResult<T> = Result<T, FlagError>;
+pub type FlagError = bool;
+
+pub struct FeatureFlag {
     key: String,
-    version: Variation,
+    version: i64,
     on: bool,
     prerequisites: Vec<Prerequisite>,
     salt: String,
@@ -13,22 +18,22 @@ struct FeatureFlag {
     targets: Vec<Target>,
     rules: Vec<Rule>,
     fallthrough: VariationOrRollOut,
-    off_variation: Variation,
+    off_variation: Option<i64>,
     variations: Vec<Variation>,
     deleted: bool,
 }
 
-struct Prerequisite {
+pub struct Prerequisite {
     pub key: Option<String>,
     pub variation: Option<Variation>,
 }
 
-struct Target {
+pub struct Target {
     pub value: Vec<String>,
     pub variation: Option<Variation>,
 }
 
-struct Rule {
+pub struct Rule {
     variation_or_rollout: VariationOrRollOut,
     pub clauses: Vec<Clause>,
 }
@@ -64,24 +69,108 @@ impl Rule {
             VariationOrRollOut::Variation(variation) => Some(variation),
         }
     }
+
+    pub fn matches_user(&self, user: &User) -> bool {
+        self.clauses.iter().fold(
+            true,
+            |pass, c| pass & c.matches_user(user),
+        )
+    }
 }
 
-enum VariationOrRollOut {
+pub enum VariationOrRollOut {
     Rollout(Rollout),
     Variation(Variation),
 }
 
-struct Rollout {
+pub struct Rollout {
     pub weighted_variations: Vec<WeightedVariation>,
     pub bucket_by: Option<String>,
 }
 
-struct WeightedVariation {
+pub struct WeightedVariation {
     pub variation: Variation,
     pub weight: i64,
 }
 
-impl FeatureFlag {}
+pub struct EvalResult {
+    pub value: Option<Variation>,
+    pub explanation: Explanation,
+    pub events: Vec<FeatureRequestEvent>,
+}
+
+pub enum Explanation {
+    Prerequisite(Prerequisite),
+    Rule(Rule),
+    Target(Target),
+    VariationOrRollOut(VariationOrRollOut),
+}
+
+impl Explanation {
+    pub fn kind(&self) -> &'static str {
+        match *self {
+            Explanation::Prerequisite(_) => "prerequisite",
+            Explanation::Rule(_) => "rule",
+            Explanation::Target(_) => "target",
+            Explanation::VariationOrRollOut(_) => "fallthrough",
+        }
+    }
+}
+
+impl FeatureFlag {
+    pub fn evalute<S: FeatureStore>(&self, user: &User, store: &S) -> EvalResult {
+        let events = vec![];
+        self.eval_with_explain(user, store, events)
+    }
+
+    fn eval_with_explain<S: FeatureStore>(
+        &self,
+        user: &User,
+        store: &S,
+        events: Vec<FeatureRequestEvent>,
+    ) -> EvalResult {
+        EvalResult {
+            value: None,
+            explanation: Explanation::Prerequisite(Prerequisite {
+                key: None,
+                variation: None,
+            }),
+            events: events,
+        }
+    }
+
+    pub fn evalute_index() -> Option<Variation> {
+        None
+    }
+
+    pub fn off_variantion(&self) -> Option<Variation> {
+        self.off_variation.and_then(|off| self.variation(off))
+    }
+
+    pub fn variation(&self, i: i64) -> Option<Variation> {
+        if i < self.variations.len() as i64 {
+            self.variations.iter().nth(i as usize).map(|v| *v)
+        } else {
+            None
+        }
+    }
+
+    pub fn key(&self) -> &str {
+        self.key.as_str()
+    }
+
+    pub fn version(&self) -> i64 {
+        self.version
+    }
+
+    pub fn on(&self) -> bool {
+        self.on
+    }
+
+    pub fn deleted(&self) -> bool {
+        self.deleted
+    }
+}
 
 #[cfg(test)]
 mod tests {

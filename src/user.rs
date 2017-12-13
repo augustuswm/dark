@@ -142,7 +142,7 @@ impl User {
         }
     }
 
-    fn get_for_eval(&self, key: &str) -> Option<&str> {
+    pub fn get_for_eval(&self, key: &str) -> Option<&str> {
         match key {
             "key" => Some(&self.builder.key),
             "ip" => self.builder.ip.as_ref(),

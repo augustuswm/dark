@@ -4,11 +4,35 @@ extern crate regex;
 use self::chrono::{DateTime, NaiveDateTime, Utc};
 use self::regex::Regex;
 
+use user::User;
+
 pub struct Clause {
     attribute: String,
     op: Operator,
     values: Vec<Value>,
     negate: bool,
+}
+
+impl Clause {
+    pub fn matches_user(&self, user: &User) -> bool {
+        if let Some(val) = user.get_for_eval(self.attribute.as_str()) {
+
+            // TODO: Add handling for non-string values coming from user data
+            self.handle_negate(self.match_any(Value::String(val.into())))
+        } else {
+            false
+        }
+    }
+
+    pub fn match_any(&self, val: Value) -> bool {
+        self.values.iter().fold(false, |pass, v| {
+            pass || self.op.apply(v, &val)
+        })
+    }
+
+    fn handle_negate(&self, status: bool) -> bool {
+        if self.negate { !status } else { status }
+    }
 }
 
 pub enum Operator {
