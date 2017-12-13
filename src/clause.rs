@@ -1,3 +1,9 @@
+extern crate chrono;
+extern crate regex;
+
+use self::chrono::{DateTime, NaiveDateTime, Utc};
+use self::regex::Regex;
+
 pub struct Clause {
     attribute: String,
     op: Operator,
@@ -45,7 +51,18 @@ impl Operator {
                     _ => false,
                 }
             }
-            Operator::Matches => false,
+            Operator::Matches => {
+                match (a, b) {
+                    (&Value::String(ref a_v), &Value::String(ref b_v)) => {
+                        if let Ok(re) = Regex::new(b_v) {
+                            re.is_match(a_v)
+                        } else {
+                            false
+                        }
+                    }
+                    _ => false,
+                }
+            }
             Operator::Contains => {
                 match (a, b) {
                     (&Value::String(ref a_v), &Value::String(ref b_v)) => {
@@ -90,7 +107,18 @@ impl Operator {
                     _ => false,
                 }
             }
-            _ => false,
+            Operator::Before => {
+                match (value_to_time(a), value_to_time(b)) {
+                    (Some(date_a), Some(date_b)) => date_a < date_b,
+                    _ => false,
+                }
+            }
+            Operator::After => {
+                match (value_to_time(a), value_to_time(b)) {
+                    (Some(date_a), Some(date_b)) => date_a > date_b,
+                    _ => false,
+                }
+            }
         }
     }
 }
@@ -109,6 +137,33 @@ impl Value {
             Value::Int(_) | Value::Float(_) => true,
             _ => false,
         }
+    }
+}
+
+fn f_to_time(f: f64) -> DateTime<Utc> {
+    let sec = (f / 1000.0).trunc();
+    let remain = (f / 1000.0) - sec;
+    let nano = (remain * 1000.0 * 1000000.0).trunc();
+
+    DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(sec as i64, nano as u32), Utc)
+}
+
+fn value_to_time(v: &Value) -> Option<DateTime<Utc>> {
+    match *v {
+        Value::String(ref v_v) => {
+            if let Ok(date) = v_v.parse::<DateTime<Utc>>() {
+                Some(date)
+            } else {
+                if let Ok(v_f) = v_v.parse::<f64>() {
+                    Some(f_to_time(v_f))
+                } else {
+                    None
+                }
+            }
+        }
+        Value::Int(ref v_v) => Some(f_to_time(*v_v as f64)),
+        Value::Float(ref v_v) => Some(f_to_time(*v_v)),
+        _ => None,
     }
 }
 
@@ -243,7 +298,23 @@ mod tests {
 
     #[test]
     fn test_op_matches() {
-        unimplemented!()
+        assert!(Operator::Matches.apply(
+            &Value::String("anything".into()),
+            &Value::String(".*".into()),
+        ));
+        assert!(Operator::Matches.apply(
+            &Value::String("darn".into()),
+            &Value::String(
+                "(\\W|^)(baloney|darn|drat|fooey|gosh\\sdarnit|heck)(\\W|$)".into(),
+            ),
+        ));
+        assert!(!Operator::Matches.apply(
+            &Value::String("barn".into()),
+            &Value::String(
+                "(\\W|^)(baloney|darn|drat|fooey|gosh\\sdarnit|heck)(\\W|$)"
+                    .into(),
+            ),
+        ));
     }
 
     #[test]
@@ -410,11 +481,101 @@ mod tests {
 
     #[test]
     fn test_op_before() {
-        unimplemented!()
+        let tests = vec![
+            (Value::Int(0), Value::Int(1), true),
+            (Value::Int(1), Value::Int(0), false),
+            (Value::Int(1), Value::Int(1), false),
+            (Value::String("0".into()), Value::String("1".into()), true),
+            (Value::String("1".into()), Value::String("0".into()), false),
+            (Value::String("1".into()), Value::String("1".into()), false),
+            (Value::Float(0.0), Value::Float(1.0), true),
+            (Value::Float(1.0), Value::Float(0.0), false),
+            (Value::Float(1.0), Value::Float(1.0), false),
+            (
+                Value::String("1970-01-01T00:00:01Z".into()),
+                Value::String("1970-01-01T00:00:02Z".into()),
+                true
+            ),
+            (
+                Value::String("1970-01-01T00:00:01Z".into()),
+                Value::String("1970-01-01T00:00:01.0001Z".into()),
+                true
+            ),
+            (
+                Value::Int(0),
+                Value::String("1970-01-01T00:00:00.0001Z".into()),
+                true
+            ),
+            (
+                Value::Float(0.0),
+                Value::String("1970-01-01T00:00:00.0001Z".into()),
+                true
+            ),
+            (
+                Value::Int(0),
+                Value::String("1970-01-01----00:00:00.0001Z".into()),
+                false
+            ),
+        ];
+
+        for (a, b, res) in tests {
+            assert_eq!(
+                Operator::Before.apply(&a, &b),
+                res,
+                "{:?} is before {:?}",
+                a,
+                b
+            );
+        }
     }
 
     #[test]
     fn test_op_after() {
-        unimplemented!()
+        let tests = vec![
+            (Value::Int(0), Value::Int(1), false),
+            (Value::Int(1), Value::Int(0), true),
+            (Value::Int(1), Value::Int(1), false),
+            (Value::String("0".into()), Value::String("1".into()), false),
+            (Value::String("1".into()), Value::String("0".into()), true),
+            (Value::String("1".into()), Value::String("1".into()), false),
+            (Value::Float(0.0), Value::Float(1.0), false),
+            (Value::Float(1.0), Value::Float(0.0), true),
+            (Value::Float(1.0), Value::Float(1.0), false),
+            (
+                Value::String("1970-01-01T00:00:01Z".into()),
+                Value::String("1970-01-01T00:00:02Z".into()),
+                false
+            ),
+            (
+                Value::String("1970-01-01T00:00:01Z".into()),
+                Value::String("1970-01-01T00:00:01.0001Z".into()),
+                false
+            ),
+            (
+                Value::Int(0),
+                Value::String("1970-01-01T00:00:00.0001Z".into()),
+                false
+            ),
+            (
+                Value::Float(0.0),
+                Value::String("1970-01-01T00:00:00.0001Z".into()),
+                false
+            ),
+            (
+                Value::Int(0),
+                Value::String("1970-01-01----00:00:00.0001Z".into()),
+                false
+            ),
+        ];
+
+        for (a, b, res) in tests {
+            assert_eq!(
+                Operator::After.apply(&a, &b),
+                res,
+                "{:?} is after {:?}",
+                a,
+                b
+            );
+        }
     }
 }
