@@ -1,17 +1,20 @@
 use clause::Clause;
 use events::FeatureRequestEvent;
-use store::FeatureStore;
+use store::{FeatureStore, MemStore};
 use user::User;
 
 pub type Variation = usize;
 
 pub type FlagResult<T> = Result<T, FlagError>;
+
+#[derive(Debug, PartialEq)]
 pub enum FlagError {
     FailedToEvalIndex,
     FailedToSatisfyPrereq,
     InvalidVariationIndex,
 }
 
+#[derive(Clone, Debug)]
 pub struct FeatureFlag {
     key: String,
     version: usize,
@@ -27,19 +30,19 @@ pub struct FeatureFlag {
     deleted: bool,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Prerequisite {
     pub key: String,
     pub variation: Variation,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Target {
     pub values: Vec<String>,
     pub variation: Option<Variation>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Rule {
     variation_or_rollout: VariationOrRollOut,
     pub clauses: Vec<Clause>,
@@ -67,7 +70,7 @@ impl Rule {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum VariationOrRollOut {
     Rollout(Rollout),
     Variation(Variation),
@@ -106,23 +109,25 @@ impl VariationOrRollOut {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Rollout {
     pub weighted_variations: Vec<WeightedVariation>,
     pub bucket_by: Option<String>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct WeightedVariation {
     pub variation: Variation,
     pub weight: usize,
 }
 
+#[derive(Debug)]
 pub struct Eval<'a> {
     pub result: VariationResult,
     pub events: Vec<FeatureRequestEvent<'a>>,
 }
 
+#[derive(Debug)]
 pub struct VariationResult {
     pub value: FlagResult<Variation>,
     pub explanation: Explanation,
@@ -133,6 +138,7 @@ pub struct IndexResult {
     pub explanation: Explanation,
 }
 
+#[derive(Debug, PartialEq)]
 pub enum Explanation {
     Prerequisite(Prerequisite),
     Rule(Rule),
@@ -152,7 +158,37 @@ impl Explanation {
 }
 
 impl FeatureFlag {
-    pub fn evalute<S: FeatureStore>(&self, user: &User, store: &S) -> Eval {
+    pub fn new(
+        key: String,
+        version: usize,
+        on: bool,
+        prerequisites: Vec<Prerequisite>,
+        salt: String,
+        sel: String,
+        targets: Vec<Target>,
+        rules: Vec<Rule>,
+        fallthrough: VariationOrRollOut,
+        off_variation: Option<usize>,
+        variations: Vec<Variation>,
+        deleted: bool,
+    ) -> FeatureFlag {
+        FeatureFlag {
+            key: key,
+            version: version,
+            on: on,
+            prerequisites: prerequisites,
+            salt: salt,
+            sel: sel,
+            targets: targets,
+            rules: rules,
+            fallthrough: fallthrough,
+            off_variation: off_variation,
+            variations: variations,
+            deleted: deleted,
+        }
+    }
+
+    pub fn evaluate<S: FeatureStore>(&self, user: &User, store: &S) -> Eval {
         let mut events = vec![];
 
         Eval {
@@ -171,7 +207,7 @@ impl FeatureFlag {
 
         for prereq in self.prerequisites.iter() {
             if failed_prereq.is_none() {
-                failed_prereq = if let Ok(p_flag) = store.get(prereq.key.as_str()) {
+                failed_prereq = if let Some(p_flag) = store.get(prereq.key.as_str()) {
                     if p_flag.on() {
                         let p_flag_eval = p_flag.eval(user, store, events);
                         let p_flag_var = p_flag.variation(prereq.variation);
@@ -250,7 +286,7 @@ impl FeatureFlag {
         }
     }
 
-    pub fn off_variantion(&self) -> Option<FlagResult<Variation>> {
+    pub fn off_variation(&self) -> Option<FlagResult<Variation>> {
         self.off_variation.map(|off| self.variation(off))
     }
 
@@ -284,6 +320,7 @@ impl FeatureFlag {
 #[cfg(test)]
 mod tests {
     use feature_flag::*;
+    use store::*;
     use user::*;
 
     #[test]
@@ -322,5 +359,111 @@ mod tests {
         let v_3 = rule.variation_index_for_user(&user_c, "hashKey", "saltyA");
         assert!(v_3.is_some(), "Variation 3 should not be None");
         assert_eq!(0, v_3.unwrap());
+    }
+
+    fn flag_with_prereq(a: String, b: String) -> FeatureFlag {
+        FeatureFlag::new(
+            a,
+            0,
+            true,
+            vec![
+                Prerequisite {
+                    key: b,
+                    variation: 0,
+                },
+            ],
+            "".into(),
+            "".into(),
+            vec![],
+            vec![],
+            VariationOrRollOut::Variation(0),
+            None,
+            vec![0, 1],
+            false,
+        )
+    }
+
+    fn flag_off(a: String) -> FeatureFlag {
+        FeatureFlag::new(
+            a,
+            0,
+            false,
+            vec![],
+            "".into(),
+            "".into(),
+            vec![],
+            vec![],
+            VariationOrRollOut::Variation(0),
+            None,
+            vec![0, 1],
+            false,
+        )
+    }
+
+    #[test]
+    fn test_prereq_does_not_exist() {
+        let f1 = flag_with_prereq("keyA".into(), "keyB".into());
+        let store = MemStore::new();
+        let user = UserBuilder::new("userKey").build();
+
+        store.upsert(f1.key(), &f1);
+
+        let eval = f1.evaluate(&user, &store);
+        let explanation = Explanation::Prerequisite(Prerequisite {
+            key: "keyB".into(),
+            variation: 0,
+        });
+
+        assert_eq!(eval.result.value, Err(FlagError::FailedToSatisfyPrereq));
+        assert_eq!(eval.result.explanation, explanation);
+        assert_eq!(eval.events.len(), 0);
+    }
+
+    // @Test
+    // public void testPrereqCollectsEventsForPrereqs() throws EvaluationException {
+    // String keyA = "keyA";
+    // String keyB = "keyB";
+    // String keyC = "keyC";
+    // FeatureFlag flagA = newFlagWithPrereq(keyA, keyB);
+    // FeatureFlag flagB = newFlagWithPrereq(keyB, keyC);
+    // FeatureFlag flagC = newFlagOff(keyC);
+    //
+    // featureStore.upsert(flagA.getKey(), flagA);
+    // featureStore.upsert(flagB.getKey(), flagB);
+    // featureStore.upsert(flagC.getKey(), flagC);
+    //
+    // LDUser user = new LDUser.Builder("userKey").build();
+    //
+    // FeatureFlag.EvalResult flagAResult = flagA.evaluate(user, featureStore);
+    // Assert.assertNotNull(flagAResult);
+    // Assert.assertNull(flagAResult.getValue());
+    // Assert.assertEquals(2, flagAResult.getPrerequisiteEvents().size());
+    //
+    // FeatureFlag.EvalResult flagBResult = flagB.evaluate(user, featureStore);
+    // Assert.assertNotNull(flagBResult);
+    // Assert.assertNull(flagBResult.getValue());
+    // Assert.assertEquals(1, flagBResult.getPrerequisiteEvents().size());
+    //
+    // FeatureFlag.EvalResult flagCResult = flagC.evaluate(user, featureStore);
+    // Assert.assertNotNull(flagCResult);
+    // Assert.assertEquals(null, flagCResult.getValue());
+    // Assert.assertEquals(0, flagCResult.getPrerequisiteEvents().size());
+    // }
+
+    #[test]
+    fn test_prereq_collects_events() {
+        let f1 = flag_with_prereq("key1".into(), "key2".into());
+        let f2 = flag_with_prereq("key2".into(), "key3".into());
+        let f3 = flag_off("key3".into());
+        let store = MemStore::new();
+        let user = UserBuilder::new("userKey").build();
+
+        store.upsert(f1.key(), &f1);
+        store.upsert(f2.key(), &f3);
+        store.upsert(f3.key(), &f3);
+
+        let f1_eval = f1.evaluate(&user, &store);
+
+        panic!("{:?}", f1_eval);
     }
 }

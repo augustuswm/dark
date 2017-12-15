@@ -8,6 +8,7 @@ use clause::Value;
 
 static LONG_SCALE: u64 = 0xFFFFFFFFFFFFFFF;
 
+#[derive(Debug)]
 pub struct UserBuilder {
     key: String,
     secondary: Option<String>,
@@ -108,10 +109,12 @@ impl UserBuilder {
     }
 }
 
+#[derive(Debug)]
 pub struct User {
     builder: UserBuilder,
 }
 
+#[derive(Debug)]
 pub struct DerivedAttribute {
     value: Value,
     last_derived: u64,
