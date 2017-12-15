@@ -52,7 +52,35 @@ impl Rule {
         key: &str,
         salt: &str,
     ) -> Option<Variation> {
-        match self.variation_or_rollout {
+        self.variation_or_rollout.variation_index_for_user(
+            user,
+            key,
+            salt,
+        )
+    }
+
+    pub fn matches_user(&self, user: &User) -> bool {
+        self.clauses.iter().fold(
+            true,
+            |pass, c| pass & c.matches_user(user),
+        )
+    }
+}
+
+#[derive(Clone)]
+pub enum VariationOrRollOut {
+    Rollout(Rollout),
+    Variation(Variation),
+}
+
+impl VariationOrRollOut {
+    pub fn variation_index_for_user(
+        &self,
+        user: &User,
+        key: &str,
+        salt: &str,
+    ) -> Option<Variation> {
+        match *self {
             VariationOrRollOut::Rollout(ref rollout) => {
                 if rollout.weighted_variations.len() == 0 {
                     None
@@ -76,19 +104,6 @@ impl Rule {
             VariationOrRollOut::Variation(variation) => Some(variation),
         }
     }
-
-    pub fn matches_user(&self, user: &User) -> bool {
-        self.clauses.iter().fold(
-            true,
-            |pass, c| pass & c.matches_user(user),
-        )
-    }
-}
-
-#[derive(Clone)]
-pub enum VariationOrRollOut {
-    Rollout(Rollout),
-    Variation(Variation),
 }
 
 #[derive(Clone)]
@@ -225,11 +240,12 @@ impl FeatureFlag {
             }
         }
 
-        // TODO: Move rule impl to VariationOrRollOut and proxy above call through property
-        // let variation = self.fallthrough.variation_index_for_user
-
         IndexResult {
-            value: Some(0), // TODO: Compute based on above
+            value: self.fallthrough.variation_index_for_user(
+                user,
+                self.key(),
+                self.salt(),
+            ),
             explanation: Explanation::VariationOrRollOut(self.fallthrough.clone()),
         }
     }
