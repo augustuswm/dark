@@ -118,6 +118,10 @@ pub struct DerivedAttribute {
 }
 
 impl User {
+    pub fn key(&self) -> &str {
+        self.builder.key.as_str()
+    }
+
     pub fn bucket(&self, key: &str, by: &str, salt: &str) -> f64 {
         if let Some(ref val) = self.get_for_eval(by) {
             let mut source = [key, salt, val].join(".");

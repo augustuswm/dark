@@ -3,14 +3,18 @@ use events::FeatureRequestEvent;
 use store::FeatureStore;
 use user::User;
 
-pub type Variation = i64;
+pub type Variation = usize;
 
 pub type FlagResult<T> = Result<T, FlagError>;
-pub type FlagError = bool;
+pub enum FlagError {
+    FailedToEvalIndex,
+    FailedToSatisfyPrereq,
+    InvalidVariationIndex,
+}
 
 pub struct FeatureFlag {
     key: String,
-    version: i64,
+    version: usize,
     on: bool,
     prerequisites: Vec<Prerequisite>,
     salt: String,
@@ -18,21 +22,24 @@ pub struct FeatureFlag {
     targets: Vec<Target>,
     rules: Vec<Rule>,
     fallthrough: VariationOrRollOut,
-    off_variation: Option<i64>,
+    off_variation: Option<usize>,
     variations: Vec<Variation>,
     deleted: bool,
 }
 
+#[derive(Clone)]
 pub struct Prerequisite {
-    pub key: Option<String>,
-    pub variation: Option<Variation>,
+    pub key: String,
+    pub variation: Variation,
 }
 
+#[derive(Clone)]
 pub struct Target {
-    pub value: Vec<String>,
+    pub values: Vec<String>,
     pub variation: Option<Variation>,
 }
 
+#[derive(Clone)]
 pub struct Rule {
     variation_or_rollout: VariationOrRollOut,
     pub clauses: Vec<Clause>,
@@ -78,25 +85,37 @@ impl Rule {
     }
 }
 
+#[derive(Clone)]
 pub enum VariationOrRollOut {
     Rollout(Rollout),
     Variation(Variation),
 }
 
+#[derive(Clone)]
 pub struct Rollout {
     pub weighted_variations: Vec<WeightedVariation>,
     pub bucket_by: Option<String>,
 }
 
+#[derive(Clone)]
 pub struct WeightedVariation {
     pub variation: Variation,
-    pub weight: i64,
+    pub weight: usize,
 }
 
-pub struct EvalResult {
-    pub value: Option<Variation>,
+pub struct Eval<'a> {
+    pub result: VariationResult,
+    pub events: Vec<FeatureRequestEvent<'a>>,
+}
+
+pub struct VariationResult {
+    pub value: FlagResult<Variation>,
     pub explanation: Explanation,
-    pub events: Vec<FeatureRequestEvent>,
+}
+
+pub struct IndexResult {
+    pub value: Option<usize>,
+    pub explanation: Explanation,
 }
 
 pub enum Explanation {
@@ -118,48 +137,122 @@ impl Explanation {
 }
 
 impl FeatureFlag {
-    pub fn evalute<S: FeatureStore>(&self, user: &User, store: &S) -> EvalResult {
-        let events = vec![];
-        self.eval_with_explain(user, store, events)
-    }
+    pub fn evalute<S: FeatureStore>(&self, user: &User, store: &S) -> Eval {
+        let mut events = vec![];
 
-    fn eval_with_explain<S: FeatureStore>(
-        &self,
-        user: &User,
-        store: &S,
-        events: Vec<FeatureRequestEvent>,
-    ) -> EvalResult {
-        EvalResult {
-            value: None,
-            explanation: Explanation::Prerequisite(Prerequisite {
-                key: None,
-                variation: None,
-            }),
+        Eval {
+            result: self.eval(user, store, &mut events),
             events: events,
         }
     }
 
-    pub fn evalute_index() -> Option<Variation> {
-        None
-    }
+    fn eval<S: FeatureStore>(
+        &self,
+        user: &User,
+        store: &S,
+        events: &mut Vec<FeatureRequestEvent>,
+    ) -> VariationResult {
+        let mut failed_prereq = None;
 
-    pub fn off_variantion(&self) -> Option<Variation> {
-        self.off_variation.and_then(|off| self.variation(off))
-    }
+        for prereq in self.prerequisites.iter() {
+            if failed_prereq.is_none() {
+                failed_prereq = if let Ok(p_flag) = store.get(prereq.key.as_str()) {
+                    if p_flag.on() {
+                        let p_flag_eval = p_flag.eval(user, store, events);
+                        let p_flag_var = p_flag.variation(prereq.variation);
 
-    pub fn variation(&self, i: i64) -> Option<Variation> {
-        if i < self.variations.len() as i64 {
-            self.variations.iter().nth(i as usize).map(|v| *v)
-        } else {
-            None
+                        // NOTE: SIDE EFFECT
+                        // Add event tracking
+
+                        if let Ok(val) = p_flag_eval.value {
+                            if let Ok(var) = p_flag_var {
+                                if val == var { None } else { Some(prereq) }
+                            } else {
+                                Some(prereq)
+                            }
+                        } else {
+                            Some(prereq)
+                        }
+                    } else {
+                        Some(prereq)
+                    }
+                } else {
+                    Some(prereq)
+                }
+            }
         }
+
+        match failed_prereq {
+            Some(failure) => VariationResult {
+                value: Err(FlagError::FailedToSatisfyPrereq),
+                explanation: Explanation::Prerequisite(failure.clone()),
+            },
+            None => {
+                let index = self.eval_index(user);
+
+                VariationResult {
+                    value: index.value.ok_or(FlagError::FailedToEvalIndex).and_then(
+                        |value| {
+                            self.variation(value)
+                        },
+                    ),
+                    explanation: index.explanation,
+                }
+            }
+        }
+    }
+
+    pub fn eval_index(&self, user: &User) -> IndexResult {
+        for target in self.targets.iter() {
+            for value in target.values.iter() {
+                if value == user.key() {
+                    return IndexResult {
+                        value: target.variation,
+                        explanation: Explanation::Target(target.clone()),
+                    };
+                }
+            }
+        }
+
+        for rule in self.rules.iter() {
+            if rule.matches_user(user) {
+                let variation = rule.variation_index_for_user(user, self.key(), self.salt());
+
+                return IndexResult {
+                    value: variation,
+                    explanation: Explanation::Rule(rule.clone()),
+                };
+            }
+        }
+
+        // TODO: Move rule impl to VariationOrRollOut and proxy above call through property
+        // let variation = self.fallthrough.variation_index_for_user
+
+        IndexResult {
+            value: Some(0), // TODO: Compute based on above
+            explanation: Explanation::VariationOrRollOut(self.fallthrough.clone()),
+        }
+    }
+
+    pub fn off_variantion(&self) -> Option<FlagResult<Variation>> {
+        self.off_variation.map(|off| self.variation(off))
+    }
+
+    pub fn variation(&self, i: usize) -> FlagResult<Variation> {
+        self.variations.iter().nth(i).map(|v| *v).ok_or(
+            FlagError::InvalidVariationIndex,
+        )
     }
 
     pub fn key(&self) -> &str {
         self.key.as_str()
     }
 
-    pub fn version(&self) -> i64 {
+    pub fn salt(&self) -> &str {
+        self.salt.as_str()
+    }
+
+    pub fn version(&self) -> usize {
         self.version
     }
 

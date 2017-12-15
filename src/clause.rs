@@ -6,6 +6,7 @@ use self::regex::Regex;
 
 use user::User;
 
+#[derive(Clone)]
 pub struct Clause {
     attribute: String,
     op: Operator,
@@ -35,6 +36,7 @@ impl Clause {
     }
 }
 
+#[derive(Clone)]
 pub enum Operator {
     In,
     EndsWith,
@@ -147,7 +149,7 @@ impl Operator {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Value {
     String(String),
     Float(f64),
