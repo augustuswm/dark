@@ -464,6 +464,7 @@ mod tests {
 
         let f1_eval = f1.evaluate(&user, &store);
 
+        // TODO: Implement events in evaluation
         panic!("{:?}", f1_eval);
     }
 }
