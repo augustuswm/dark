@@ -68,12 +68,10 @@ impl Store for MemStore {
             }
         } else {
             Ok(flag.clone())
-        };
+        }?;
 
-        replacement.map(|f| {
-            self.data.writer().insert(key.into(), f);
-            ()
-        })
+        self.data.writer().insert(key.into(), replacement);
+        Ok(())
     }
 }
 

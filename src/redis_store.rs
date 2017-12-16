@@ -53,32 +53,97 @@ impl RedisStore {
     fn features_key(prefix: Option<String>) -> String {
         prefix.unwrap_or("launchdarkly".into()) + ":features"
     }
+
+    fn get_raw(&self, key: &str) -> Option<FeatureFlag> {
+        self.client.hget(self.key.to_string(), key.to_string()).ok()
+    }
 }
 
 impl Store for RedisStore {
     fn get(&self, key: &str) -> Option<FeatureFlag> {
-        self.client.hget(self.key.to_string(), key.to_string()).ok()
-    }
 
-    fn get_all(&self) -> StoreResult<HashMap<String, FeatureFlag>> {
-        self.client.hgetall(self.key.to_string()).map_err(
-            StoreError::RedisFailure,
+        // Checks cache
+
+        // TODO: Check for value in single cache
+
+        self.get_raw(key).and_then(
+            |flag: FeatureFlag| if !flag.deleted() {
+
+                // TODO: Write to single cache
+
+                Some(flag)
+            } else {
+                None
+            },
         )
     }
 
+    fn get_all(&self) -> StoreResult<HashMap<String, FeatureFlag>> {
+
+        // Checks cache
+
+        // TODO: Check for value in all cache
+
+        self.client
+            .hgetall(self.key.to_string())
+            .map(|mut map: HashMap<String, FeatureFlag>| {
+                map.retain(|k, flag| !flag.deleted());
+
+                // TODO: Write to all cache
+
+                map
+            })
+            .map_err(StoreError::RedisFailure)
+    }
+
     fn delete(&self, key: &str, version: usize) -> StoreResult<()> {
-        unimplemented!();
+
+        // Ignores cache lookup
+
+        if let Some(flag) = self.get_raw(key) {
+            if flag.version() < version {
+                let mut replacement = flag.clone();
+                replacement.delete();
+                replacement.update_version(version);
+                self.upsert(key.into(), &replacement);
+                Ok(())
+            } else {
+                Err(StoreError::NewerVersionFound)
+            }
+        } else {
+            Err(StoreError::NotFound)
+        }
     }
 
     fn upsert(&self, key: &str, flag: &FeatureFlag) -> StoreResult<()> {
-        let string_rep = flag.to_redis_args();
+
+        // Ignores cache lookup
+
+        let replacement = if let Some(e_flag) = self.get_raw(key) {
+            if e_flag.version() < flag.version() {
+                Ok(flag)
+            } else {
+                warn!(
+                    "Can not overwrite flag with key {:?} in store with older version",
+                    key
+                );
+                Err(StoreError::NewerVersionFound)
+            }
+        } else {
+            Ok(flag)
+        }?;
+
+        let string_rep = replacement.to_redis_args();
 
         if string_rep[0].as_slice() != FAIL {
-            let res: RedisResult<FeatureFlag> = self.client.hset(
+            let res: RedisResult<u8> = self.client.hset(
                 self.key.to_string(),
-                flag.key().to_string(),
+                replacement.key().to_string(),
                 string_rep,
             );
+
+            // TODO: Delete all cache
+            // TODO: Update single cache
 
             res.map(|_| ()).map_err(StoreError::RedisFailure)
         } else {
@@ -113,14 +178,14 @@ mod tests {
     }
 
     fn dataset() -> RedisStore {
-        let mut map: HashMap<String, FeatureFlag> = HashMap::new();
+        let store = RedisStore::open("0.0.0.0".into(), 6379, None, None).unwrap();
         let flags = vec![flag("f1", 5, false), flag("f2", 5, true)];
 
         for flag in flags.into_iter() {
-            map.insert(flag.key().into(), flag);
+            store.upsert(flag.key(), &flag);
         }
 
-        RedisStore::open("".into(), 0, None, None).unwrap()
+        store
     }
 
     #[test]

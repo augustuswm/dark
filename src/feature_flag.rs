@@ -18,7 +18,7 @@ pub enum FlagError {
     InvalidVariationIndex,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct FeatureFlag {
     key: String,
     version: usize,
@@ -356,7 +356,8 @@ impl FromRedisValue for FeatureFlag {
                         })
                     })
             }
-            _ => {
+            ref x => {
+                println!("{:?}", x);
                 let err = (
                     ErrorKind::TypeError,
                     "Recieved non-data type for deserializing",
@@ -367,12 +368,6 @@ impl FromRedisValue for FeatureFlag {
     }
 }
 
-impl ToRedisArgs for FeatureFlag {
-    fn to_redis_args(&self) -> Vec<Vec<u8>> {
-        self.to_redis_args()
-    }
-}
-
 impl<'a> ToRedisArgs for &'a FeatureFlag {
     fn to_redis_args(&self) -> Vec<Vec<u8>> {
         let ser = serde_json::to_string(&self);
@@ -380,6 +375,7 @@ impl<'a> ToRedisArgs for &'a FeatureFlag {
         vec![
             match ser {
                 Ok(json) => json.as_bytes().into(),
+
                 // Because this trait can not normally fail, but json serialization
                 // can fail, the failure cause is encoded as a special value that
                 // is checked by the store

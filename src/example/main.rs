@@ -9,12 +9,9 @@ mod tests {
 
     use dark::{FeatureFlag, RedisStore, Store, VariationOrRollOut};
 
-    #[test]
-    fn test_redis_store() {
-        let r = RedisStore::open("0.0.0.0".into(), 6379, None, None).unwrap();
-
-        let f = FeatureFlag::new(
-            "f1".into(),
+    fn flag(key: &str, deleted: bool) -> FeatureFlag {
+        FeatureFlag::new(
+            key.into(),
             1,
             true,
             vec![],
@@ -25,14 +22,28 @@ mod tests {
             VariationOrRollOut::Variation(0),
             Some(0),
             vec![],
-            false,
-        );
+            deleted,
+        )
+    }
 
-        print!("\n");
-        println!("{:?}", r.upsert(f.key(), &f));
-        print!("\n");
-        println!("{:?}", r.get(f.key()));
+    #[test]
+    fn test_redis_store() {
+        let r = RedisStore::open("0.0.0.0".into(), 6379, Some("example_flags".into()), None)
+            .unwrap();
 
-        assert!(false);
+        let f1 = flag("ex_1", false);
+        let f2 = flag("ex_2", true);
+        let f3 = flag("ex_3", false);
+
+        r.upsert(f1.key(), &f1);
+        r.upsert(f2.key(), &f2);
+        r.upsert(f3.key(), &f3);
+
+        let all = r.get_all().unwrap();
+
+        assert_eq!(all.len(), 2);
+        assert_eq!(all.get("ex_1").unwrap().clone(), f1);
+        assert!(all.get("ex_2").is_none());
+        assert_eq!(all.get("ex_3").unwrap().clone(), f3);
     }
 }
