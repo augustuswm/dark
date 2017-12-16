@@ -337,6 +337,7 @@ impl FeatureFlag {
 #[cfg(test)]
 mod tests {
     use feature_flag::*;
+    use mem_store::*;
     use store::*;
     use user::*;
 
