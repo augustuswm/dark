@@ -8,6 +8,7 @@ pub type StoreResult<T> = Result<T, StoreError>;
 
 #[derive(Debug, PartialEq)]
 pub enum StoreError {
+    FailedToSerializeFlag,
     InvalidRedisConfig,
     NewerVersionFound,
     NotFound,

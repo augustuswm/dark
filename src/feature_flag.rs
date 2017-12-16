@@ -1,4 +1,4 @@
-use redis::{FromRedisValue, RedisResult, ToRedisArgs, Value as RedisValue};
+use redis::{ErrorKind, FromRedisValue, RedisResult, ToRedisArgs, Value as RedisValue};
 use serde_json;
 
 use clause::Clause;
@@ -14,6 +14,7 @@ pub type FlagResult<T> = Result<T, FlagError>;
 pub enum FlagError {
     FailedToEvalIndex,
     FailedToSatisfyPrereq,
+    InvalidRedisValue,
     InvalidVariationIndex,
 }
 
@@ -339,28 +340,29 @@ impl FeatureFlag {
 
 impl FromRedisValue for FeatureFlag {
     fn from_redis_value(v: &RedisValue) -> RedisResult<FeatureFlag> {
-        let default = FeatureFlag::new(
-            "default".into(),
-            1,
-            true,
-            vec![],
-            "salt".into(),
-            "sel".into(),
-            vec![],
-            vec![],
-            VariationOrRollOut::Variation(0),
-            Some(0),
-            vec![],
-            false,
-        );
-
         match *v {
-            RedisValue::Data(ref data) => Ok(
-                serde_json::from_str(
-                    String::from_utf8(data.clone()).unwrap().as_str(),
-                ).unwrap(),
-            ),
-            _ => Ok(default),
+            RedisValue::Data(ref data) => {
+                let data = String::from_utf8(data.clone());
+
+                data.or_else(|_| {
+                    Err((ErrorKind::TypeError, "Expected utf8 string").into())
+                }).and_then(|ser| {
+                        serde_json::from_str(ser.as_str()).or_else(|_| {
+                            let err = (
+                                ErrorKind::TypeError,
+                                "Unable to deserialize json to FeatureFlag",
+                            );
+                            Err(err.into())
+                        })
+                    })
+            }
+            _ => {
+                let err = (
+                    ErrorKind::TypeError,
+                    "Recieved non-data type for deserializing",
+                );
+                Err(err.into())
+            }
         }
     }
 }
@@ -373,7 +375,17 @@ impl ToRedisArgs for FeatureFlag {
 
 impl<'a> ToRedisArgs for &'a FeatureFlag {
     fn to_redis_args(&self) -> Vec<Vec<u8>> {
-        vec![serde_json::to_string(self).unwrap().as_bytes().to_vec()]
+        let ser = serde_json::to_string(&self);
+
+        vec![
+            match ser {
+                Ok(json) => json.as_bytes().into(),
+                // Because this trait can not normally fail, but json serialization
+                // can fail, the failure cause is encoded as a special value that
+                // is checked by the store
+                Err(_) => "fail".to_string().as_bytes().into(),
+            },
+        ]
     }
 }
 

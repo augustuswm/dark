@@ -1,10 +1,12 @@
-use redis::{Client, Commands, RedisResult};
+use redis::{Client, Commands, RedisResult, ToRedisArgs};
 
 use std::collections::HashMap;
 
 use feature_flag::FeatureFlag;
 use hash_cache::HashCache;
 use store::{Store, StoreResult, StoreError};
+
+const FAIL: &'static [u8; 4] = &[102, 97, 105, 108];
 
 pub struct RedisStore {
     key: String,
@@ -69,13 +71,19 @@ impl Store for RedisStore {
     }
 
     fn upsert(&self, key: &str, flag: &FeatureFlag) -> StoreResult<()> {
-        let res: RedisResult<FeatureFlag> = self.client.hset(
-            self.key.to_string(),
-            flag.key().to_string(),
-            flag,
-        );
+        let string_rep = flag.to_redis_args();
 
-        res.map(|_| ()).map_err(StoreError::RedisFailure)
+        if string_rep[0].as_slice() != FAIL {
+            let res: RedisResult<FeatureFlag> = self.client.hset(
+                self.key.to_string(),
+                flag.key().to_string(),
+                string_rep,
+            );
+
+            res.map(|_| ()).map_err(StoreError::RedisFailure)
+        } else {
+            Err(StoreError::FailedToSerializeFlag)
+        }
     }
 }
 
