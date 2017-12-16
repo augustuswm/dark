@@ -10,8 +10,8 @@ pub enum StoreError {
     NewerVersionFound,
 }
 
-pub trait FeatureStore: Store + Sync {}
-impl<T: Store + Sync> FeatureStore for T {}
+pub trait FeatureStore: Store + From<HashMap<String, FeatureFlag>> + Sync {}
+impl<T: Store + From<HashMap<String, FeatureFlag>> + Sync> FeatureStore for T {}
 
 pub trait Store {
     fn get(&self, key: &str) -> Option<FeatureFlag>;
