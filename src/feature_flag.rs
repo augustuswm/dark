@@ -317,12 +317,20 @@ impl FeatureFlag {
         self.version
     }
 
+    pub fn update_version(&mut self, version: usize) {
+        self.version = version;
+    }
+
     pub fn on(&self) -> bool {
         self.on
     }
 
     pub fn deleted(&self) -> bool {
         self.deleted
+    }
+
+    pub fn delete(&mut self) {
+        self.deleted = true;
     }
 }
 
@@ -331,44 +339,6 @@ mod tests {
     use feature_flag::*;
     use store::*;
     use user::*;
-
-    #[test]
-    fn test_variation_index_for_user() {
-        let wv1 = WeightedVariation {
-            variation: 0,
-            weight: 60000,
-        };
-        let wv2 = WeightedVariation {
-            variation: 1,
-            weight: 40000,
-        };
-        let rollout = Rollout {
-            weighted_variations: vec![wv1, wv2],
-            bucket_by: None,
-        };
-        let rule = Rule {
-            variation_or_rollout: VariationOrRollOut::Rollout(rollout),
-            clauses: vec![],
-        };
-
-        let user_key_a = "userKeyA";
-        let user_a = UserBuilder::new(user_key_a).build();
-        let v_1 = rule.variation_index_for_user(&user_a, "hashKey", "saltyA");
-        assert!(v_1.is_some(), "Variation 1 should not be None");
-        assert_eq!(0, v_1.unwrap());
-
-        let user_key_b = "userKeyB";
-        let user_b = UserBuilder::new(user_key_b).build();
-        let v_2 = rule.variation_index_for_user(&user_b, "hashKey", "saltyA");
-        assert!(v_2.is_some(), "Variation 2 should not be None");
-        assert_eq!(1, v_2.unwrap());
-
-        let user_key_c = "userKeyC";
-        let user_c = UserBuilder::new(user_key_c).build();
-        let v_3 = rule.variation_index_for_user(&user_c, "hashKey", "saltyA");
-        assert!(v_3.is_some(), "Variation 3 should not be None");
-        assert_eq!(0, v_3.unwrap());
-    }
 
     fn flag_with_prereq(a: String, b: String) -> FeatureFlag {
         FeatureFlag::new(
@@ -407,6 +377,44 @@ mod tests {
             vec![0, 1],
             false,
         )
+    }
+
+    #[test]
+    fn test_variation_index_for_user() {
+        let wv1 = WeightedVariation {
+            variation: 0,
+            weight: 60000,
+        };
+        let wv2 = WeightedVariation {
+            variation: 1,
+            weight: 40000,
+        };
+        let rollout = Rollout {
+            weighted_variations: vec![wv1, wv2],
+            bucket_by: None,
+        };
+        let rule = Rule {
+            variation_or_rollout: VariationOrRollOut::Rollout(rollout),
+            clauses: vec![],
+        };
+
+        let user_key_a = "userKeyA";
+        let user_a = UserBuilder::new(user_key_a).build();
+        let v_1 = rule.variation_index_for_user(&user_a, "hashKey", "saltyA");
+        assert!(v_1.is_some(), "Variation 1 should not be None");
+        assert_eq!(0, v_1.unwrap());
+
+        let user_key_b = "userKeyB";
+        let user_b = UserBuilder::new(user_key_b).build();
+        let v_2 = rule.variation_index_for_user(&user_b, "hashKey", "saltyA");
+        assert!(v_2.is_some(), "Variation 2 should not be None");
+        assert_eq!(1, v_2.unwrap());
+
+        let user_key_c = "userKeyC";
+        let user_c = UserBuilder::new(user_key_c).build();
+        let v_3 = rule.variation_index_for_user(&user_c, "hashKey", "saltyA");
+        assert!(v_3.is_some(), "Variation 3 should not be None");
+        assert_eq!(0, v_3.unwrap());
     }
 
     #[test]
