@@ -4,6 +4,8 @@ use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use feature_flag::FeatureFlag;
 
 pub type StoreResult<T> = Result<T, StoreError>;
+
+#[derive(Debug, PartialEq)]
 pub enum StoreError {
     NotFound,
     NewerVersionFound,
@@ -14,7 +16,7 @@ impl<T: Store + Sync> FeatureStore for T {}
 
 pub trait Store {
     fn get(&self, key: &str) -> Option<FeatureFlag>;
-    fn get_all(&self) -> StoreResult<HashMap<String, FeatureFlag>>;
+    fn get_all(&self) -> HashMap<String, FeatureFlag>;
     fn delete(&self, key: &str, version: usize) -> StoreResult<()>;
     fn upsert(&self, key: &str, flag: &FeatureFlag) -> StoreResult<()>;
 }
@@ -68,10 +70,10 @@ impl Store for MemStore {
         })
     }
 
-    fn get_all(&self) -> StoreResult<HashMap<String, FeatureFlag>> {
+    fn get_all(&self) -> HashMap<String, FeatureFlag> {
         let mut res = self.reader().clone();
         res.retain(|k, f| !f.deleted());
-        Ok(res)
+        res
     }
 
     fn delete(&self, key: &str, version: usize) -> StoreResult<()> {
@@ -114,20 +116,64 @@ impl Store for MemStore {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::collections::HashMap;
+
+    use feature_flag::*;
+    use store::*;
+
+    fn flag<S: Into<String>>(key: S, version: usize, deleted: bool) -> FeatureFlag {
+        FeatureFlag::new(
+            key.into(),
+            version,
+            true,
+            vec![],
+            "".into(),
+            "".into(),
+            vec![],
+            vec![],
+            VariationOrRollOut::Variation(0),
+            None,
+            vec![0, 1],
+            deleted,
+        )
+    }
+
+    fn dataset() -> MemStore {
+        let mut map = HashMap::new();
+        let flags = vec![flag("f1", 5, false), flag("f2", 5, true)];
+
+        for flag in flags.into_iter() {
+            map.insert(flag.key().into(), flag);
+        }
+
+        map.into()
+    }
 
     #[test]
-    fn test_all_does_not_return_deleted() {
-        unimplemented!()
+    fn test_does_not_return_deleted() {
+        assert!(dataset().get("f2").is_none())
+    }
+
+    #[test]
+    fn test_all_returns_only_not_deleted() {
+        let all = dataset().get_all();
+        assert!(all.get("f1".into()).is_some());
+        assert!(all.get("f2".into()).is_none());
     }
 
     #[test]
     fn test_delete_does_not_delete_newer_version() {
-        unimplemented!()
+        assert_eq!(
+            dataset().delete("f1", 3),
+            Err(StoreError::NewerVersionFound)
+        )
     }
 
     #[test]
     fn test_upsert_does_not_replace_newer_version() {
-        unimplemented!()
+        assert_eq!(
+            dataset().upsert("f1", &flag("f1", 3, false)),
+            Err(StoreError::NewerVersionFound)
+        )
     }
 }
