@@ -1,13 +1,13 @@
 use clause::Clause;
 use events::FeatureRequestEvent;
-use store::{FeatureStore, MemStore};
+use store::FeatureStore;
 use user::User;
 
 pub type Variation = usize;
 
 pub type FlagResult<T> = Result<T, FlagError>;
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum FlagError {
     FailedToEvalIndex,
     FailedToSatisfyPrereq,
@@ -127,7 +127,7 @@ pub struct Eval<'a> {
     pub events: Vec<FeatureRequestEvent<'a>>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct VariationResult {
     pub value: FlagResult<Variation>,
     pub explanation: Explanation,
@@ -138,7 +138,7 @@ pub struct IndexResult {
     pub explanation: Explanation,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Explanation {
     Prerequisite(Prerequisite),
     Rule(Rule),
@@ -188,7 +188,7 @@ impl FeatureFlag {
         }
     }
 
-    pub fn evaluate<S: FeatureStore>(&self, user: &User, store: &S) -> Eval {
+    pub fn evaluate<'a, S: FeatureStore>(&self, user: &'a User, store: &S) -> Eval<'a> {
         let mut events = vec![];
 
         Eval {
@@ -197,14 +197,13 @@ impl FeatureFlag {
         }
     }
 
-    fn eval<S: FeatureStore>(
+    fn eval<'a, S: FeatureStore>(
         &self,
-        user: &User,
+        user: &'a User,
         store: &S,
-        events: &mut Vec<FeatureRequestEvent>,
+        events: &mut Vec<FeatureRequestEvent<'a>>,
     ) -> VariationResult {
         let mut failed_prereq = None;
-
         for prereq in self.prerequisites.iter() {
             if failed_prereq.is_none() {
                 failed_prereq = if let Some(p_flag) = store.get(prereq.key.as_str()) {
@@ -212,10 +211,20 @@ impl FeatureFlag {
                         let p_flag_eval = p_flag.eval(user, store, events);
                         let p_flag_var = p_flag.variation(prereq.variation);
 
-                        // NOTE: SIDE EFFECT
-                        // Add event tracking
+                        // Unsure if this is where tracking should occur. Seems to differ by client
+                        // go | node require the flag to be on, whereas php | java do not
+                        let event = FeatureRequestEvent::new(
+                            prereq.key.as_str(),
+                            user,
+                            p_flag_eval.clone().value.ok(),
+                            None,
+                            p_flag.version(),
+                            self.key(),
+                        );
+                        events.push(event);
 
                         if let Ok(val) = p_flag_eval.value {
+
                             if let Ok(var) = p_flag_var {
                                 if val == var { None } else { Some(prereq) }
                             } else {
@@ -419,37 +428,6 @@ mod tests {
         assert_eq!(eval.events.len(), 0);
     }
 
-    // @Test
-    // public void testPrereqCollectsEventsForPrereqs() throws EvaluationException {
-    // String keyA = "keyA";
-    // String keyB = "keyB";
-    // String keyC = "keyC";
-    // FeatureFlag flagA = newFlagWithPrereq(keyA, keyB);
-    // FeatureFlag flagB = newFlagWithPrereq(keyB, keyC);
-    // FeatureFlag flagC = newFlagOff(keyC);
-    //
-    // featureStore.upsert(flagA.getKey(), flagA);
-    // featureStore.upsert(flagB.getKey(), flagB);
-    // featureStore.upsert(flagC.getKey(), flagC);
-    //
-    // LDUser user = new LDUser.Builder("userKey").build();
-    //
-    // FeatureFlag.EvalResult flagAResult = flagA.evaluate(user, featureStore);
-    // Assert.assertNotNull(flagAResult);
-    // Assert.assertNull(flagAResult.getValue());
-    // Assert.assertEquals(2, flagAResult.getPrerequisiteEvents().size());
-    //
-    // FeatureFlag.EvalResult flagBResult = flagB.evaluate(user, featureStore);
-    // Assert.assertNotNull(flagBResult);
-    // Assert.assertNull(flagBResult.getValue());
-    // Assert.assertEquals(1, flagBResult.getPrerequisiteEvents().size());
-    //
-    // FeatureFlag.EvalResult flagCResult = flagC.evaluate(user, featureStore);
-    // Assert.assertNotNull(flagCResult);
-    // Assert.assertEquals(null, flagCResult.getValue());
-    // Assert.assertEquals(0, flagCResult.getPrerequisiteEvents().size());
-    // }
-
     #[test]
     fn test_prereq_collects_events() {
         let f1 = flag_with_prereq("key1".into(), "key2".into());
@@ -459,12 +437,19 @@ mod tests {
         let user = UserBuilder::new("userKey").build();
 
         store.upsert(f1.key(), &f1);
-        store.upsert(f2.key(), &f3);
+        store.upsert(f2.key(), &f2);
         store.upsert(f3.key(), &f3);
 
         let f1_eval = f1.evaluate(&user, &store);
+        assert_eq!(f1_eval.result.value, Err(FlagError::FailedToSatisfyPrereq));
+        assert_eq!(f1_eval.events.len(), 1);
 
-        // TODO: Implement events in evaluation
-        panic!("{:?}", f1_eval);
+        let f2_eval = f2.evaluate(&user, &store);
+        assert_eq!(f2_eval.result.value, Err(FlagError::FailedToSatisfyPrereq));
+        assert_eq!(f2_eval.events.len(), 0);
+
+        let f3_eval = f3.evaluate(&user, &store);
+        assert_eq!(f3_eval.result.value, Ok(0));
+        assert_eq!(f3_eval.events.len(), 0);
     }
 }
