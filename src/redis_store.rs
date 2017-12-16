@@ -16,7 +16,7 @@ pub struct RedisStore {
 impl RedisStore {
     pub fn open(
         host: String,
-        port: u8,
+        port: u32,
         prefix: Option<String>,
         timeout: Option<u8>,
     ) -> StoreResult<RedisStore> {

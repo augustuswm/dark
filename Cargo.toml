@@ -3,9 +3,18 @@ name = "dark"
 version = "0.1.0"
 authors = ["Augustus Mayo <gusmayo@gmail.com>"]
 
+[[bin]]
+doc = true
+name = "example"
+path = "src/example/main.rs"
+test = true
+
 [dependencies]
 chrono = "0.4"
 log = "0.3.8"
 redis = "0.8.0"
 regex = "0.2.3"
+serde = "1.0.24"
+serde_derive = "1.0.24"
+serde_json = "1.0.8"
 sha-1 = "0.7.0"

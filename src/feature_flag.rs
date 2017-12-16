@@ -1,4 +1,5 @@
 use redis::{FromRedisValue, RedisResult, ToRedisArgs, Value as RedisValue};
+use serde_json;
 
 use clause::Clause;
 use events::FeatureRequestEvent;
@@ -16,7 +17,7 @@ pub enum FlagError {
     InvalidVariationIndex,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct FeatureFlag {
     key: String,
     version: usize,
@@ -32,19 +33,19 @@ pub struct FeatureFlag {
     deleted: bool,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Prerequisite {
     pub key: String,
     pub variation: Variation,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Target {
     pub values: Vec<String>,
     pub variation: Option<Variation>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Rule {
     variation_or_rollout: VariationOrRollOut,
     pub clauses: Vec<Clause>,
@@ -72,7 +73,7 @@ impl Rule {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum VariationOrRollOut {
     Rollout(Rollout),
     Variation(Variation),
@@ -111,13 +112,13 @@ impl VariationOrRollOut {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Rollout {
     pub weighted_variations: Vec<WeightedVariation>,
     pub bucket_by: Option<String>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct WeightedVariation {
     pub variation: Variation,
     pub weight: usize,
@@ -338,32 +339,41 @@ impl FeatureFlag {
 
 impl FromRedisValue for FeatureFlag {
     fn from_redis_value(v: &RedisValue) -> RedisResult<FeatureFlag> {
-        Ok(FeatureFlag::new(
-            "flag_key".into(),
-            0,
+        let default = FeatureFlag::new(
+            "default".into(),
+            1,
             true,
             vec![],
-            "".into(),
-            "".into(),
+            "salt".into(),
+            "sel".into(),
             vec![],
             vec![],
             VariationOrRollOut::Variation(0),
-            None,
-            vec![0, 1],
+            Some(0),
+            vec![],
             false,
-        ))
+        );
+
+        match *v {
+            RedisValue::Data(ref data) => Ok(
+                serde_json::from_str(
+                    String::from_utf8(data.clone()).unwrap().as_str(),
+                ).unwrap(),
+            ),
+            _ => Ok(default),
+        }
     }
 }
 
 impl ToRedisArgs for FeatureFlag {
     fn to_redis_args(&self) -> Vec<Vec<u8>> {
-        vec![vec![0]]
+        self.to_redis_args()
     }
 }
 
 impl<'a> ToRedisArgs for &'a FeatureFlag {
     fn to_redis_args(&self) -> Vec<Vec<u8>> {
-        vec![vec![0]]
+        vec![serde_json::to_string(self).unwrap().as_bytes().to_vec()]
     }
 }
 
