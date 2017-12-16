@@ -1,8 +1,5 @@
-extern crate chrono;
-extern crate regex;
-
-use self::chrono::{DateTime, NaiveDateTime, Utc};
-use self::regex::Regex;
+use chrono::{DateTime, NaiveDateTime, Utc};
+use regex::Regex;
 
 use user::User;
 

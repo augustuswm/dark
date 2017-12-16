@@ -1,5 +1,4 @@
-extern crate chrono;
-use self::chrono::Utc;
+use chrono::Utc;
 
 use clause::Value;
 use feature_flag::Variation;

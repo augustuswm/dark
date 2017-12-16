@@ -1,6 +1,4 @@
-extern crate sha1;
-
-use self::sha1::{Sha1, Digest};
+use sha1::{Sha1, Digest};
 
 use std::collections::HashMap;
 

@@ -1,3 +1,5 @@
+use redis::{FromRedisValue, RedisResult, ToRedisArgs, Value as RedisValue};
+
 use clause::Clause;
 use events::FeatureRequestEvent;
 use store::FeatureStore;
@@ -331,6 +333,37 @@ impl FeatureFlag {
 
     pub fn delete(&mut self) {
         self.deleted = true;
+    }
+}
+
+impl FromRedisValue for FeatureFlag {
+    fn from_redis_value(v: &RedisValue) -> RedisResult<FeatureFlag> {
+        Ok(FeatureFlag::new(
+            "flag_key".into(),
+            0,
+            true,
+            vec![],
+            "".into(),
+            "".into(),
+            vec![],
+            vec![],
+            VariationOrRollOut::Variation(0),
+            None,
+            vec![0, 1],
+            false,
+        ))
+    }
+}
+
+impl ToRedisArgs for FeatureFlag {
+    fn to_redis_args(&self) -> Vec<Vec<u8>> {
+        vec![vec![0]]
+    }
+}
+
+impl<'a> ToRedisArgs for &'a FeatureFlag {
+    fn to_redis_args(&self) -> Vec<Vec<u8>> {
+        vec![vec![0]]
     }
 }
 

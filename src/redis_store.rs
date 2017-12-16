@@ -1,29 +1,67 @@
+use redis::{Client, Commands, RedisResult};
+
 use std::collections::HashMap;
 
 use feature_flag::FeatureFlag;
+use hash_cache::HashCache;
 use store::{Store, StoreResult, StoreError};
 
-pub struct RedisStore {}
-
-impl RedisStore {
-    pub fn new() -> RedisStore {
-        RedisStore {}
-    }
+pub struct RedisStore {
+    key: String,
+    client: Client,
+    cache: HashCache,
+    timeout: u8,
 }
 
-impl From<HashMap<String, FeatureFlag>> for RedisStore {
-    fn from(map: HashMap<String, FeatureFlag>) -> RedisStore {
-        RedisStore {}
+impl RedisStore {
+    pub fn open(
+        host: String,
+        port: u8,
+        prefix: Option<String>,
+        timeout: Option<u8>,
+    ) -> StoreResult<RedisStore> {
+        RedisStore::open_with_url(format!("redis://{}:{}", host, port), prefix, timeout)
+    }
+
+    pub fn open_with_url(
+        url: String,
+        prefix: Option<String>,
+        timeout: Option<u8>,
+    ) -> StoreResult<RedisStore> {
+        let client = Client::open(url.as_str()).map_err(
+            |_| StoreError::InvalidRedisConfig,
+        )?;
+
+        Ok(RedisStore::open_with_client(client, prefix, timeout))
+    }
+
+    pub fn open_with_client(
+        client: Client,
+        prefix: Option<String>,
+        timeout: Option<u8>,
+    ) -> RedisStore {
+        RedisStore {
+            key: RedisStore::features_key(prefix),
+            client: client,
+            cache: HashCache::new(),
+            timeout: timeout.unwrap_or(0),
+        }
+    }
+
+    fn features_key(prefix: Option<String>) -> String {
+        prefix.unwrap_or("launchdarkly".into()) + ":features"
     }
 }
 
 impl Store for RedisStore {
     fn get(&self, key: &str) -> Option<FeatureFlag> {
-        unimplemented!();
+        self.client.hget(self.key.to_string(), key.to_string()).ok()
     }
 
-    fn get_all(&self) -> HashMap<String, FeatureFlag> {
-        unimplemented!();
+    fn get_all(&self) -> StoreResult<HashMap<String, FeatureFlag>> {
+        self.client.hgetall(self.key.to_string()).map_err(
+            StoreError::RedisFailure,
+        )
     }
 
     fn delete(&self, key: &str, version: usize) -> StoreResult<()> {
@@ -31,7 +69,13 @@ impl Store for RedisStore {
     }
 
     fn upsert(&self, key: &str, flag: &FeatureFlag) -> StoreResult<()> {
-        unimplemented!();
+        let res: RedisResult<FeatureFlag> = self.client.hset(
+            self.key.to_string(),
+            flag.key().to_string(),
+            flag,
+        );
+
+        res.map(|_| ()).map_err(StoreError::RedisFailure)
     }
 }
 
@@ -61,14 +105,14 @@ mod tests {
     }
 
     fn dataset() -> RedisStore {
-        let mut map = HashMap::new();
+        let mut map: HashMap<String, FeatureFlag> = HashMap::new();
         let flags = vec![flag("f1", 5, false), flag("f2", 5, true)];
 
         for flag in flags.into_iter() {
             map.insert(flag.key().into(), flag);
         }
 
-        map.into()
+        RedisStore::open("".into(), 0, None, None).unwrap()
     }
 
     #[test]
@@ -78,7 +122,7 @@ mod tests {
 
     #[test]
     fn test_all_returns_only_not_deleted() {
-        let all = dataset().get_all();
+        let all = dataset().get_all().unwrap();
         assert!(all.get("f1".into()).is_some());
         assert!(all.get("f2".into()).is_none());
     }

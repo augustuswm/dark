@@ -1,46 +1,26 @@
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
+use hash_cache::HashCache;
 use feature_flag::FeatureFlag;
 use store::{Store, StoreResult, StoreError};
 
 pub struct MemStore {
-    data: Arc<RwLock<HashMap<String, FeatureFlag>>>,
+    data: HashCache,
 }
 
 impl MemStore {
     pub fn new() -> MemStore {
-        MemStore { data: Arc::new(RwLock::new(HashMap::new())) }
+        MemStore { data: HashCache::new() }
     }
 
     fn get_raw(&self, key: &str) -> Option<FeatureFlag> {
-        self.reader().get(key).map(|f| f.clone())
-    }
-
-    fn reader(&self) -> RwLockReadGuard<HashMap<String, FeatureFlag>> {
-        match self.data.read() {
-            Ok(guard) => guard,
-            Err(err) => {
-                error!("Read guard for store failed due to store being poisoned.");
-                panic!("{:?}", err)
-            }
-        }
-    }
-
-    fn writer(&self) -> RwLockWriteGuard<HashMap<String, FeatureFlag>> {
-        match self.data.write() {
-            Ok(guard) => guard,
-            Err(err) => {
-                error!("Write guard for store failed due to store being poisoned.");
-                panic!("{:?}", err)
-            }
-        }
+        self.data.reader().get(key).map(|f| f.clone())
     }
 }
 
 impl From<HashMap<String, FeatureFlag>> for MemStore {
     fn from(map: HashMap<String, FeatureFlag>) -> MemStore {
-        MemStore { data: Arc::new(RwLock::new(map)) }
+        MemStore { data: map.into() }
     }
 }
 
@@ -53,10 +33,10 @@ impl Store for MemStore {
         })
     }
 
-    fn get_all(&self) -> HashMap<String, FeatureFlag> {
-        let mut res = self.reader().clone();
+    fn get_all(&self) -> StoreResult<HashMap<String, FeatureFlag>> {
+        let mut res = self.data.reader().clone();
         res.retain(|k, f| !f.deleted());
-        res
+        Ok(res)
     }
 
     fn delete(&self, key: &str, version: usize) -> StoreResult<()> {
@@ -65,7 +45,7 @@ impl Store for MemStore {
                 let mut replacement = flag.clone();
                 replacement.delete();
                 replacement.update_version(version);
-                self.writer().insert(key.into(), replacement);
+                self.data.writer().insert(key.into(), replacement);
                 Ok(())
             } else {
                 Err(StoreError::NewerVersionFound)
@@ -91,7 +71,7 @@ impl Store for MemStore {
         };
 
         replacement.map(|f| {
-            self.writer().insert(key.into(), f);
+            self.data.writer().insert(key.into(), f);
             ()
         })
     }
@@ -140,7 +120,7 @@ mod tests {
 
     #[test]
     fn test_all_returns_only_not_deleted() {
-        let all = dataset().get_all();
+        let all = dataset().get_all().unwrap();
         assert!(all.get("f1".into()).is_some());
         assert!(all.get("f2".into()).is_none());
     }
