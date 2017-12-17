@@ -5,13 +5,7 @@ jobs:
       - image: rust
     steps:
       - checkout
-      - run: cargo install cargo-test-junit
-      - run: mkdir ~/test_results
-      - run: cargo test-junit --name ~/test_results/output.xml
-      - store_test_results:
-          path: ~/test_results
-      - store_artifacts:
-          path: ~/test_results
+      - run: cargo test
 
 workflows:
   version: 2
