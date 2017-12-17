@@ -12,7 +12,7 @@ const ALL_CACHE: &'static str = "$all_flags$";
 
 pub struct RedisStore {
     key: String,
-    conn: Connection,
+    client: Client,
     cache: HashCache<FeatureFlag>,
     all_cache: HashCache<HashMap<String, FeatureFlag>>,
     timeout: u64,
@@ -37,20 +37,17 @@ impl RedisStore {
             |_| StoreError::InvalidRedisConfig,
         )?;
 
-        // Get a single connection to group all of the requests on
-        let c = client.get_connection().map_err(StoreError::RedisFailure)?;
-
-        Ok(RedisStore::open_with_connection(c, prefix, timeout))
+        Ok(RedisStore::open_with_client(client, prefix, timeout))
     }
 
-    pub fn open_with_connection(
-        conn: Connection,
+    pub fn open_with_client(
+        client: Client,
         prefix: Option<String>,
         timeout: Option<u64>,
     ) -> RedisStore {
         RedisStore {
             key: RedisStore::features_key(prefix),
-            conn: conn,
+            client: client,
             cache: HashCache::new(),
             all_cache: HashCache::new(),
             timeout: timeout.unwrap_or(0),
@@ -65,17 +62,34 @@ impl RedisStore {
         prefix.unwrap_or("launchdarkly".into()) + ":features"
     }
 
+    fn conn(&self) -> StoreResult<Connection> {
+
+        // Get a single connection to group requests on
+        self.client.get_connection().map_err(
+            StoreError::RedisFailure,
+        )
+    }
+
     fn get_raw(&self, key: &str) -> Option<FeatureFlag> {
-        self.conn.hget(self.key.to_string(), key.to_string()).ok()
+
+        // TODO: Accept connection
+
+        self.client.hget(self.key.to_string(), key.to_string()).ok()
     }
 
     fn start<T: FromRedisValue>(&self, key: &str) -> StoreResult<()> {
-        let res: RedisResult<T> = cmd("WATCH").arg(key).query(&self.conn);
+
+        // TODO: Accept connection
+
+        let res: RedisResult<T> = cmd("WATCH").arg(key).query(&self.client);
         res.map(|_| ()).map_err(StoreError::RedisFailure)
     }
 
     fn cleanup<T: FromRedisValue>(&self) -> StoreResult<()> {
-        let res: RedisResult<T> = cmd("UNWATCH").query(&self.conn);
+
+        // TODO: Accept connection
+
+        let res: RedisResult<T> = cmd("UNWATCH").query(&self.client);
         res.map(|_| ()).map_err(StoreError::RedisFailure)
     }
 }
@@ -92,6 +106,8 @@ impl Store for RedisStore {
                 return Some(flag.clone());
             }
         };
+
+        // TODO: Use connection
 
         self.get_raw(key).and_then(
             |flag: FeatureFlag| if !flag.deleted() {
@@ -119,7 +135,9 @@ impl Store for RedisStore {
             }
         };
 
-        self.conn
+        // TODO: Use connection
+
+        self.client
             .hgetall(self.key.to_string())
             .map(|mut map: HashMap<String, FeatureFlag>| {
                 map.retain(|k, flag| !flag.deleted());
@@ -138,6 +156,8 @@ impl Store for RedisStore {
 
         // Ignores cache lookup
 
+        // TODO: Use connection
+
         let _: () = self.start::<()>(key)?;
 
         if let Some(flag) = self.get_raw(key) {
@@ -145,6 +165,8 @@ impl Store for RedisStore {
                 let mut replacement = flag.clone();
                 replacement.delete();
                 replacement.update_version(version);
+
+                // TODO: Should not call upsert. Refactor into shared writer
                 self.upsert(key.into(), &replacement);
 
                 self.cleanup::<()>()
@@ -162,6 +184,8 @@ impl Store for RedisStore {
 
         // Ignores cache lookup
 
+        // TODO: Use connection
+
         let _: () = self.start::<()>(key)?;
 
         let replacement = if let Some(e_flag) = self.get_raw(key) {
@@ -178,10 +202,11 @@ impl Store for RedisStore {
             Ok(flag)
         }?;
 
+        // TODO: Refactor into encapsulated writer
         let string_rep = replacement.to_redis_args();
 
         if string_rep[0].as_slice() != FAIL {
-            let res: RedisResult<u8> = self.conn.hset(
+            let res: RedisResult<u8> = self.client.hset(
                 self.key.to_string(),
                 replacement.key().to_string(),
                 string_rep,
