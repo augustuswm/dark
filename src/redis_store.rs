@@ -10,8 +10,6 @@ use store::{Store, StoreResult, StoreError};
 const FAIL: &'static [u8; 4] = &[102, 97, 105, 108];
 const ALL_CACHE: &'static str = "$all_flags$";
 
-// TODO: Create minimal RedisClient trait to front Client so tests can use fake client
-
 #[derive(Debug)]
 pub struct RedisStore {
     key: String,
