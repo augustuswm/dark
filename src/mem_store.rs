@@ -5,7 +5,7 @@ use feature_flag::FeatureFlag;
 use store::{Store, StoreResult, StoreError};
 
 pub struct MemStore {
-    data: HashCache,
+    data: HashCache<FeatureFlag>,
 }
 
 impl MemStore {

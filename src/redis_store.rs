@@ -14,7 +14,8 @@ const ALL_CACHE: &'static str = "$all_flags$";
 pub struct RedisStore {
     key: String,
     client: Client,
-    cache: HashCache,
+    cache: HashCache<FeatureFlag>,
+    all_cache: HashCache<HashMap<String, FeatureFlag>>,
     timeout: u64,
 }
 
@@ -49,6 +50,7 @@ impl RedisStore {
             key: RedisStore::features_key(prefix),
             client: client,
             cache: HashCache::new(),
+            all_cache: HashCache::new(),
             timeout: timeout.unwrap_or(0),
         }
     }
@@ -97,14 +99,23 @@ impl Store for RedisStore {
 
         // Checks all cache
 
-        // TODO: Check for value in all cache
+        if let Some(&(ref map, exp)) = self.all_cache.reader().get(ALL_CACHE) {
+            let now = Utc::now().timestamp();
+
+            if exp < now {
+                return Ok(map.clone());
+            }
+        };
 
         self.client
             .hgetall(self.key.to_string())
             .map(|mut map: HashMap<String, FeatureFlag>| {
                 map.retain(|k, flag| !flag.deleted());
 
-                // TODO: Write to all cache
+                self.all_cache.writer().insert(ALL_CACHE.into(), (
+                    map.clone(),
+                    self.expiration_starting_now(),
+                ));
 
                 map
             })
@@ -157,7 +168,7 @@ impl Store for RedisStore {
                 string_rep,
             );
 
-            self.cache.writer().remove(ALL_CACHE);
+            self.all_cache.writer().remove(ALL_CACHE);
             self.cache.writer().insert(key.to_string(), (
                 replacement.clone(),
                 self.expiration_starting_now(),
