@@ -126,6 +126,8 @@ impl Store for RedisStore {
 
         // Ignores cache lookup
 
+        // TODO: Add transaction handling
+
         if let Some(flag) = self.get_raw(key) {
             if flag.version() < version {
                 let mut replacement = flag.clone();
@@ -144,6 +146,8 @@ impl Store for RedisStore {
     fn upsert(&self, key: &str, flag: &FeatureFlag) -> StoreResult<()> {
 
         // Ignores cache lookup
+
+        // TODO: Add transaction handling
 
         let replacement = if let Some(e_flag) = self.get_raw(key) {
             if e_flag.version() < flag.version() {
