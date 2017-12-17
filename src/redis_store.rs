@@ -1,5 +1,5 @@
 use chrono::Utc;
-use redis::{Client, Commands, RedisResult, ToRedisArgs};
+use redis::{Client, cmd, Commands, Connection, FromRedisValue, RedisResult, ToRedisArgs};
 
 use std::collections::HashMap;
 
@@ -10,10 +10,9 @@ use store::{Store, StoreResult, StoreError};
 const FAIL: &'static [u8; 4] = &[102, 97, 105, 108];
 const ALL_CACHE: &'static str = "$all_flags$";
 
-#[derive(Debug)]
 pub struct RedisStore {
     key: String,
-    client: Client,
+    conn: Connection,
     cache: HashCache<FeatureFlag>,
     all_cache: HashCache<HashMap<String, FeatureFlag>>,
     timeout: u64,
@@ -38,17 +37,20 @@ impl RedisStore {
             |_| StoreError::InvalidRedisConfig,
         )?;
 
-        Ok(RedisStore::open_with_client(client, prefix, timeout))
+        // Get a single connection to group all of the requests on
+        let c = client.get_connection().map_err(StoreError::RedisFailure)?;
+
+        Ok(RedisStore::open_with_connection(c, prefix, timeout))
     }
 
-    pub fn open_with_client(
-        client: Client,
+    pub fn open_with_connection(
+        conn: Connection,
         prefix: Option<String>,
         timeout: Option<u64>,
     ) -> RedisStore {
         RedisStore {
             key: RedisStore::features_key(prefix),
-            client: client,
+            conn: conn,
             cache: HashCache::new(),
             all_cache: HashCache::new(),
             timeout: timeout.unwrap_or(0),
@@ -64,7 +66,17 @@ impl RedisStore {
     }
 
     fn get_raw(&self, key: &str) -> Option<FeatureFlag> {
-        self.client.hget(self.key.to_string(), key.to_string()).ok()
+        self.conn.hget(self.key.to_string(), key.to_string()).ok()
+    }
+
+    fn start<T: FromRedisValue>(&self, key: &str) -> StoreResult<()> {
+        let res: RedisResult<T> = cmd("WATCH").arg(key).query(&self.conn);
+        res.map(|_| ()).map_err(StoreError::RedisFailure)
+    }
+
+    fn cleanup<T: FromRedisValue>(&self) -> StoreResult<()> {
+        let res: RedisResult<T> = cmd("UNWATCH").query(&self.conn);
+        res.map(|_| ()).map_err(StoreError::RedisFailure)
     }
 }
 
@@ -107,7 +119,7 @@ impl Store for RedisStore {
             }
         };
 
-        self.client
+        self.conn
             .hgetall(self.key.to_string())
             .map(|mut map: HashMap<String, FeatureFlag>| {
                 map.retain(|k, flag| !flag.deleted());
@@ -126,7 +138,7 @@ impl Store for RedisStore {
 
         // Ignores cache lookup
 
-        // TODO: Add transaction handling
+        let _: () = self.start::<()>(key)?;
 
         if let Some(flag) = self.get_raw(key) {
             if flag.version() < version {
@@ -134,11 +146,14 @@ impl Store for RedisStore {
                 replacement.delete();
                 replacement.update_version(version);
                 self.upsert(key.into(), &replacement);
-                Ok(())
+
+                self.cleanup::<()>()
             } else {
+                self.cleanup::<()>();
                 Err(StoreError::NewerVersionFound)
             }
         } else {
+            self.cleanup::<()>();
             Err(StoreError::NotFound)
         }
     }
@@ -147,7 +162,7 @@ impl Store for RedisStore {
 
         // Ignores cache lookup
 
-        // TODO: Add transaction handling
+        let _: () = self.start::<()>(key)?;
 
         let replacement = if let Some(e_flag) = self.get_raw(key) {
             if e_flag.version() < flag.version() {
@@ -166,7 +181,7 @@ impl Store for RedisStore {
         let string_rep = replacement.to_redis_args();
 
         if string_rep[0].as_slice() != FAIL {
-            let res: RedisResult<u8> = self.client.hset(
+            let res: RedisResult<u8> = self.conn.hset(
                 self.key.to_string(),
                 replacement.key().to_string(),
                 string_rep,
@@ -178,8 +193,11 @@ impl Store for RedisStore {
                 self.expiration_starting_now(),
             ));
 
+            self.cleanup::<()>();
             res.map(|_| ()).map_err(StoreError::RedisFailure)
         } else {
+
+            self.cleanup::<()>();
             Err(StoreError::FailedToSerializeFlag)
         }
     }
