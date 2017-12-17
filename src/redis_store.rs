@@ -70,26 +70,41 @@ impl RedisStore {
         )
     }
 
-    fn get_raw(&self, key: &str) -> Option<FeatureFlag> {
+    fn get_raw(&self, key: &str, conn: &Connection) -> Option<FeatureFlag> {
 
-        // TODO: Accept connection
-
-        self.client.hget(self.key.to_string(), key.to_string()).ok()
+        conn.hget(self.key.to_string(), key.to_string()).ok()
     }
 
-    fn start<T: FromRedisValue>(&self, key: &str) -> StoreResult<()> {
+    fn put(&self, key: &str, flag: &FeatureFlag, conn: &Connection) -> StoreResult<()> {
 
-        // TODO: Accept connection
+        // Manually serialize to redis storable value to allow for failure handling
+        let flag_ser = flag.to_redis_args();
 
-        let res: RedisResult<T> = cmd("WATCH").arg(key).query(&self.client);
+        if flag_ser[0].as_slice() != FAIL {
+            let res: RedisResult<u8> =
+                conn.hset(self.key.to_string(), flag.key().to_string(), flag_ser);
+
+            self.all_cache.writer().remove(ALL_CACHE);
+            self.cache.writer().insert(key.to_string(), (
+                flag.clone(),
+                self.expiration_starting_now(),
+            ));
+
+            res.map(|_| ()).map_err(StoreError::RedisFailure)
+        } else {
+            Err(StoreError::FailedToSerializeFlag)
+        }
+    }
+
+    fn start<T: FromRedisValue>(&self, key: &str, conn: &Connection) -> StoreResult<()> {
+
+        let res: RedisResult<T> = cmd("WATCH").arg(key).query(conn);
         res.map(|_| ()).map_err(StoreError::RedisFailure)
     }
 
-    fn cleanup<T: FromRedisValue>(&self) -> StoreResult<()> {
+    fn cleanup<T: FromRedisValue>(&self, conn: &Connection) -> StoreResult<()> {
 
-        // TODO: Accept connection
-
-        let res: RedisResult<T> = cmd("UNWATCH").query(&self.client);
+        let res: RedisResult<T> = cmd("UNWATCH").query(conn);
         res.map(|_| ()).map_err(StoreError::RedisFailure)
     }
 }
@@ -107,20 +122,20 @@ impl Store for RedisStore {
             }
         };
 
-        // TODO: Use connection
+        self.conn().ok().and_then(|conn| {
+            self.get_raw(key, &conn).and_then(|flag: FeatureFlag| {
+                if !flag.deleted() {
+                    self.cache.writer().insert(key.into(), (
+                        flag.clone(),
+                        self.expiration_starting_now(),
+                    ));
 
-        self.get_raw(key).and_then(
-            |flag: FeatureFlag| if !flag.deleted() {
-                self.cache.writer().insert(key.into(), (
-                    flag.clone(),
-                    self.expiration_starting_now(),
-                ));
-
-                Some(flag)
-            } else {
-                None
-            },
-        )
+                    Some(flag)
+                } else {
+                    None
+                }
+            })
+        })
     }
 
     fn get_all(&self) -> StoreResult<HashMap<String, FeatureFlag>> {
@@ -135,9 +150,7 @@ impl Store for RedisStore {
             }
         };
 
-        // TODO: Use connection
-
-        self.client
+        self.conn()?
             .hgetall(self.key.to_string())
             .map(|mut map: HashMap<String, FeatureFlag>| {
                 map.retain(|k, flag| !flag.deleted());
@@ -156,39 +169,37 @@ impl Store for RedisStore {
 
         // Ignores cache lookup
 
-        // TODO: Use connection
+        let conn = self.conn()?;
 
-        let _: () = self.start::<()>(key)?;
+        let _: () = self.start::<()>(key, &conn)?;
 
-        if let Some(flag) = self.get_raw(key) {
+        let res = if let Some(flag) = self.get_raw(key, &conn) {
             if flag.version() < version {
                 let mut replacement = flag.clone();
                 replacement.delete();
                 replacement.update_version(version);
 
-                // TODO: Should not call upsert. Refactor into shared writer
-                self.upsert(key.into(), &replacement);
-
-                self.cleanup::<()>()
+                self.put(key, &replacement, &conn)
             } else {
-                self.cleanup::<()>();
                 Err(StoreError::NewerVersionFound)
             }
         } else {
-            self.cleanup::<()>();
             Err(StoreError::NotFound)
-        }
+        };
+
+        self.cleanup::<()>(&conn);
+        res
     }
 
     fn upsert(&self, key: &str, flag: &FeatureFlag) -> StoreResult<()> {
 
         // Ignores cache lookup
 
-        // TODO: Use connection
+        let conn = self.conn()?;
 
-        let _: () = self.start::<()>(key)?;
+        let _: () = self.start::<()>(key, &conn)?;
 
-        let replacement = if let Some(e_flag) = self.get_raw(key) {
+        let replacement = if let Some(e_flag) = self.get_raw(key, &conn) {
             if e_flag.version() < flag.version() {
                 Ok(flag)
             } else {
@@ -202,29 +213,10 @@ impl Store for RedisStore {
             Ok(flag)
         }?;
 
-        // TODO: Refactor into encapsulated writer
-        let string_rep = replacement.to_redis_args();
+        let res = self.put(key, replacement, &conn);
 
-        if string_rep[0].as_slice() != FAIL {
-            let res: RedisResult<u8> = self.client.hset(
-                self.key.to_string(),
-                replacement.key().to_string(),
-                string_rep,
-            );
-
-            self.all_cache.writer().remove(ALL_CACHE);
-            self.cache.writer().insert(key.to_string(), (
-                replacement.clone(),
-                self.expiration_starting_now(),
-            ));
-
-            self.cleanup::<()>();
-            res.map(|_| ()).map_err(StoreError::RedisFailure)
-        } else {
-
-            self.cleanup::<()>();
-            Err(StoreError::FailedToSerializeFlag)
-        }
+        self.cleanup::<()>(&conn);
+        res
     }
 }
 
