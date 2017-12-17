@@ -14,12 +14,12 @@ impl MemStore {
     }
 
     fn get_raw(&self, key: &str) -> Option<FeatureFlag> {
-        self.data.reader().get(key).map(|f| f.clone())
+        self.data.reader().get(key).map(|&(ref f, exp)| f.clone())
     }
 }
 
-impl From<HashMap<String, FeatureFlag>> for MemStore {
-    fn from(map: HashMap<String, FeatureFlag>) -> MemStore {
+impl From<HashMap<String, (FeatureFlag, i64)>> for MemStore {
+    fn from(map: HashMap<String, (FeatureFlag, i64)>) -> MemStore {
         MemStore { data: map.into() }
     }
 }
@@ -34,8 +34,15 @@ impl Store for MemStore {
     }
 
     fn get_all(&self) -> StoreResult<HashMap<String, FeatureFlag>> {
-        let mut res = self.data.reader().clone();
-        res.retain(|k, f| !f.deleted());
+        let data = self.data.reader();
+        let mut res: HashMap<String, FeatureFlag> = HashMap::new();
+
+        for (k, &(ref f, exp)) in data.iter() {
+            if !f.deleted() {
+                res.insert(k.clone(), f.clone());
+            }
+        }
+
         Ok(res)
     }
 
@@ -45,7 +52,7 @@ impl Store for MemStore {
                 let mut replacement = flag.clone();
                 replacement.delete();
                 replacement.update_version(version);
-                self.data.writer().insert(key.into(), replacement);
+                self.data.writer().insert(key.into(), (replacement, 0));
                 Ok(())
             } else {
                 Err(StoreError::NewerVersionFound)
@@ -70,7 +77,7 @@ impl Store for MemStore {
             Ok(flag.clone())
         }?;
 
-        self.data.writer().insert(key.into(), replacement);
+        self.data.writer().insert(key.into(), (replacement, 0));
         Ok(())
     }
 }
@@ -105,7 +112,7 @@ mod tests {
         let flags = vec![flag("f1", 5, false), flag("f2", 5, true)];
 
         for flag in flags.into_iter() {
-            map.insert(flag.key().into(), flag);
+            map.insert(flag.key().into(), (flag, 0));
         }
 
         map.into()

@@ -3,12 +3,13 @@ use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use feature_flag::FeatureFlag;
 
+#[derive(Debug)]
 pub struct HashCache {
-    cache: Arc<RwLock<HashMap<String, FeatureFlag>>>,
+    cache: Arc<RwLock<HashMap<String, (FeatureFlag, i64)>>>,
 }
 
-impl From<HashMap<String, FeatureFlag>> for HashCache {
-    fn from(map: HashMap<String, FeatureFlag>) -> HashCache {
+impl From<HashMap<String, (FeatureFlag, i64)>> for HashCache {
+    fn from(map: HashMap<String, (FeatureFlag, i64)>) -> HashCache {
         HashCache { cache: Arc::new(RwLock::new(map)) }
     }
 }
@@ -18,7 +19,7 @@ impl HashCache {
         HashCache { cache: Arc::new(RwLock::new(HashMap::new())) }
     }
 
-    pub fn reader(&self) -> RwLockReadGuard<HashMap<String, FeatureFlag>> {
+    pub fn reader(&self) -> RwLockReadGuard<HashMap<String, (FeatureFlag, i64)>> {
         match self.cache.read() {
             Ok(guard) => guard,
             Err(err) => {
@@ -28,7 +29,7 @@ impl HashCache {
         }
     }
 
-    pub fn writer(&self) -> RwLockWriteGuard<HashMap<String, FeatureFlag>> {
+    pub fn writer(&self) -> RwLockWriteGuard<HashMap<String, (FeatureFlag, i64)>> {
         match self.cache.write() {
             Ok(guard) => guard,
             Err(err) => {

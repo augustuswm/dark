@@ -1,4 +1,4 @@
-#![allow(dead_code, unused_variables)]
+#![allow(dead_code, unused_must_use, unused_variables)]
 
 extern crate chrono;
 #[macro_use]

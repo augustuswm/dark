@@ -1,3 +1,4 @@
+use chrono::Utc;
 use redis::{Client, Commands, RedisResult, ToRedisArgs};
 
 use std::collections::HashMap;
@@ -7,12 +8,16 @@ use hash_cache::HashCache;
 use store::{Store, StoreResult, StoreError};
 
 const FAIL: &'static [u8; 4] = &[102, 97, 105, 108];
+const ALL_CACHE: &'static str = "$all_flags$";
 
+// TODO: Create minimal RedisClient trait to front Client so tests can use fake client
+
+#[derive(Debug)]
 pub struct RedisStore {
     key: String,
     client: Client,
     cache: HashCache,
-    timeout: u8,
+    timeout: u64,
 }
 
 impl RedisStore {
@@ -20,7 +25,7 @@ impl RedisStore {
         host: String,
         port: u32,
         prefix: Option<String>,
-        timeout: Option<u8>,
+        timeout: Option<u64>,
     ) -> StoreResult<RedisStore> {
         RedisStore::open_with_url(format!("redis://{}:{}", host, port), prefix, timeout)
     }
@@ -28,7 +33,7 @@ impl RedisStore {
     pub fn open_with_url(
         url: String,
         prefix: Option<String>,
-        timeout: Option<u8>,
+        timeout: Option<u64>,
     ) -> StoreResult<RedisStore> {
         let client = Client::open(url.as_str()).map_err(
             |_| StoreError::InvalidRedisConfig,
@@ -40,7 +45,7 @@ impl RedisStore {
     pub fn open_with_client(
         client: Client,
         prefix: Option<String>,
-        timeout: Option<u8>,
+        timeout: Option<u64>,
     ) -> RedisStore {
         RedisStore {
             key: RedisStore::features_key(prefix),
@@ -48,6 +53,10 @@ impl RedisStore {
             cache: HashCache::new(),
             timeout: timeout.unwrap_or(0),
         }
+    }
+
+    fn expiration_starting_now(&self) -> i64 {
+        Utc::now().timestamp() + self.timeout as i64
     }
 
     fn features_key(prefix: Option<String>) -> String {
@@ -62,14 +71,22 @@ impl RedisStore {
 impl Store for RedisStore {
     fn get(&self, key: &str) -> Option<FeatureFlag> {
 
-        // Checks cache
+        // Checks individual cache
 
-        // TODO: Check for value in single cache
+        if let Some(&(ref flag, exp)) = self.cache.reader().get(key) {
+            let now = Utc::now().timestamp();
+
+            if exp < now {
+                return Some(flag.clone());
+            }
+        };
 
         self.get_raw(key).and_then(
             |flag: FeatureFlag| if !flag.deleted() {
-
-                // TODO: Write to single cache
+                self.cache.writer().insert(key.into(), (
+                    flag.clone(),
+                    self.expiration_starting_now(),
+                ));
 
                 Some(flag)
             } else {
@@ -80,7 +97,7 @@ impl Store for RedisStore {
 
     fn get_all(&self) -> StoreResult<HashMap<String, FeatureFlag>> {
 
-        // Checks cache
+        // Checks all cache
 
         // TODO: Check for value in all cache
 
@@ -142,8 +159,11 @@ impl Store for RedisStore {
                 string_rep,
             );
 
-            // TODO: Delete all cache
-            // TODO: Update single cache
+            self.cache.writer().remove(ALL_CACHE);
+            self.cache.writer().insert(key.to_string(), (
+                replacement.clone(),
+                self.expiration_starting_now(),
+            ));
 
             res.map(|_| ()).map_err(StoreError::RedisFailure)
         } else {
@@ -155,8 +175,6 @@ impl Store for RedisStore {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-
     use feature_flag::*;
     use redis_store::*;
 
@@ -178,7 +196,7 @@ mod tests {
     }
 
     fn dataset() -> RedisStore {
-        let store = RedisStore::open("0.0.0.0".into(), 6379, None, None).unwrap();
+        let store = RedisStore::open("0.0.0.0".into(), 6379, None, Some(3600)).unwrap();
         let flags = vec![flag("f1", 5, false), flag("f2", 5, true)];
 
         for flag in flags.into_iter() {

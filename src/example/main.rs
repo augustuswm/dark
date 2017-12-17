@@ -1,6 +1,6 @@
-extern crate dark;
+#![allow(dead_code, unused_must_use, unused_variables)]
 
-use dark::{RedisStore, Store};
+extern crate dark;
 
 pub fn main() {}
 
@@ -42,8 +42,8 @@ mod tests {
         let all = r.get_all().unwrap();
 
         assert_eq!(all.len(), 2);
-        assert_eq!(all.get("ex_1").unwrap().clone(), f1);
+        assert_eq!(all.get("ex_1").unwrap(), &f1);
         assert!(all.get("ex_2").is_none());
-        assert_eq!(all.get("ex_3").unwrap().clone(), f3);
+        assert_eq!(all.get("ex_3").unwrap(), &f3);
     }
 }
