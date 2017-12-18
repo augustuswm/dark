@@ -12,6 +12,7 @@ extern crate serde_json;
 extern crate sha1;
 
 mod clause;
+mod config;
 mod events;
 mod feature_flag;
 mod hash_cache;
@@ -20,6 +21,7 @@ mod redis_store;
 mod store;
 mod user;
 
+pub use config::{Config, ConfigBuilder};
 pub use feature_flag::{FeatureFlag, VariationOrRollOut};
 pub use mem_store::MemStore;
 pub use redis_store::RedisStore;
