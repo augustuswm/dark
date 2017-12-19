@@ -6,7 +6,7 @@ use clause::Value;
 
 static LONG_SCALE: u64 = 0xFFFFFFFFFFFFFFF;
 
-#[derive(Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct UserBuilder {
     key: String,
     secondary: Option<String>,
@@ -107,12 +107,14 @@ impl UserBuilder {
     }
 }
 
-#[derive(Debug)]
+// TODO: Refactor into reverse impl. See config
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct User {
     builder: UserBuilder,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DerivedAttribute {
     value: Value,
     last_derived: u64,

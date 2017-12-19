@@ -1,5 +1,4 @@
 use mem_store::MemStore;
-use redis_store::RedisStore;
 use store::FeatureStore;
 
 pub struct Config<T: FeatureStore> {
@@ -8,6 +7,7 @@ pub struct Config<T: FeatureStore> {
     pub events_uri: String,
     pub capacity: i64,
     pub flush_interval: i64,
+    pub sampling_interval: i64,
     pub poll_interval: i64,
     pub timeout: i64,
     pub stream: bool,
@@ -42,6 +42,7 @@ impl ConfigBuilder<MemStore> {
                 events_uri: "https://events.launchdarkly.com".into(),
                 capacity: 1000,
                 flush_interval: 5,
+                sampling_interval: 0,
                 poll_interval: 1,
                 timeout: 3,
                 stream: true,
@@ -120,6 +121,7 @@ impl<T: FeatureStore> ConfigBuilder<T> {
                 events_uri: config.events_uri,
                 capacity: config.capacity,
                 flush_interval: config.flush_interval,
+                sampling_interval: config.sampling_interval,
                 poll_interval: config.poll_interval,
                 timeout: config.timeout,
                 stream: config.stream,

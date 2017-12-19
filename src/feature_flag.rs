@@ -126,9 +126,9 @@ pub struct WeightedVariation {
 }
 
 #[derive(Debug)]
-pub struct Eval<'a> {
+pub struct Eval {
     pub result: VariationResult,
-    pub events: Vec<FeatureRequestEvent<'a>>,
+    pub events: Vec<FeatureRequestEvent>,
 }
 
 #[derive(Clone, Debug)]
@@ -192,7 +192,7 @@ impl FeatureFlag {
         }
     }
 
-    pub fn evaluate<'a, S: FeatureStore>(&self, user: &'a User, store: &S) -> Eval<'a> {
+    pub fn evaluate<S: FeatureStore>(&self, user: &User, store: &S) -> Eval {
         let mut events = vec![];
 
         Eval {
@@ -201,11 +201,11 @@ impl FeatureFlag {
         }
     }
 
-    fn eval<'a, S: FeatureStore>(
+    fn eval<S: FeatureStore>(
         &self,
-        user: &'a User,
+        user: &User,
         store: &S,
-        events: &mut Vec<FeatureRequestEvent<'a>>,
+        events: &mut Vec<FeatureRequestEvent>,
     ) -> VariationResult {
         let mut failed_prereq = None;
         for prereq in self.prerequisites.iter() {
