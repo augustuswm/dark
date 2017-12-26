@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct HashCache<T> {
     cache: Arc<RwLock<HashMap<String, (T, i64)>>>,
 }

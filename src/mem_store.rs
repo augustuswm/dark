@@ -80,8 +80,15 @@ impl Store for MemStore {
         self.data.writer().insert(key.into(), (replacement, 0));
         Ok(())
     }
-}
 
+    fn init(&self, flags: HashMap<String, FeatureFlag>) -> StoreResult<()> {
+        for (key, flag) in flags {
+            self.upsert(key.as_str(), &flag);
+        }
+
+        Ok(())
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -102,7 +109,7 @@ mod tests {
             vec![],
             VariationOrRollOut::Variation(0),
             None,
-            vec![0, 1],
+            vec![VariationValue::Integer(0), VariationValue::Integer(1)],
             deleted,
         )
     }

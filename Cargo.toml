@@ -12,10 +12,10 @@ test = true
 [dependencies]
 chrono = "0.4"
 futures = "0.1.17"
-hyper = "0.11.9"
 log = "0.3.8"
 redis = "0.8.0"
 regex = "0.2.3"
+reqwest = "0.8.2"
 serde = "1.0.24"
 serde_derive = "1.0.24"
 serde_json = "1.0.8"

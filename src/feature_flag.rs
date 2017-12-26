@@ -8,6 +8,15 @@ use user::User;
 
 pub type Variation = usize;
 
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum VariationValue {
+    Boolean(bool),
+    Integer(i64),
+    Float(f64),
+    String(String),
+}
+
 pub type FlagResult<T> = Result<T, FlagError>;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -29,8 +38,9 @@ pub struct FeatureFlag {
     targets: Vec<Target>,
     rules: Vec<Rule>,
     fallthrough: VariationOrRollOut,
+    #[serde(rename = "offVariation")]
     off_variation: Option<usize>,
-    variations: Vec<Variation>,
+    variations: Vec<VariationValue>,
     deleted: bool,
 }
 
@@ -76,7 +86,9 @@ impl Rule {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum VariationOrRollOut {
+    #[serde(rename = "rollout")]
     Rollout(Rollout),
+    #[serde(rename = "variation")]
     Variation(Variation),
 }
 
@@ -115,7 +127,9 @@ impl VariationOrRollOut {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Rollout {
+    #[serde(rename = "variations")]
     pub weighted_variations: Vec<WeightedVariation>,
+    #[serde(rename = "bucketBy")]
     pub bucket_by: Option<String>,
 }
 
@@ -133,7 +147,7 @@ pub struct Eval {
 
 #[derive(Clone, Debug)]
 pub struct VariationResult {
-    pub value: FlagResult<Variation>,
+    pub value: FlagResult<VariationValue>,
     pub explanation: Explanation,
 }
 
@@ -173,7 +187,7 @@ impl FeatureFlag {
         rules: Vec<Rule>,
         fallthrough: VariationOrRollOut,
         off_variation: Option<usize>,
-        variations: Vec<Variation>,
+        variations: Vec<VariationValue>,
         deleted: bool,
     ) -> FeatureFlag {
         FeatureFlag {
@@ -223,7 +237,7 @@ impl FeatureFlag {
                             p_flag_eval.clone().value.ok(),
                             None,
                             p_flag.version(),
-                            self.key(),
+                            Some(self.key().into()),
                         );
                         events.push(event);
 
@@ -299,12 +313,12 @@ impl FeatureFlag {
         }
     }
 
-    pub fn off_variation(&self) -> Option<FlagResult<Variation>> {
+    pub fn off_variation(&self) -> Option<FlagResult<VariationValue>> {
         self.off_variation.map(|off| self.variation(off))
     }
 
-    pub fn variation(&self, i: usize) -> FlagResult<Variation> {
-        self.variations.iter().nth(i).map(|v| *v).ok_or(
+    pub fn variation(&self, i: usize) -> FlagResult<VariationValue> {
+        self.variations.iter().nth(i).map(|v| v.clone()).ok_or(
             FlagError::InvalidVariationIndex,
         )
     }
@@ -409,7 +423,7 @@ mod tests {
             vec![],
             VariationOrRollOut::Variation(0),
             None,
-            vec![0, 1],
+            vec![VariationValue::Integer(0), VariationValue::Integer(1)],
             false,
         )
     }
@@ -426,7 +440,7 @@ mod tests {
             vec![],
             VariationOrRollOut::Variation(0),
             None,
-            vec![0, 1],
+            vec![VariationValue::Integer(0), VariationValue::Integer(1)],
             false,
         )
     }
@@ -509,7 +523,7 @@ mod tests {
         assert_eq!(f2_eval.events.len(), 0);
 
         let f3_eval = f3.evaluate(&user, &store);
-        assert_eq!(f3_eval.result.value, Ok(0));
+        assert_eq!(f3_eval.result.value, Ok(VariationValue::Integer(0)));
         assert_eq!(f3_eval.events.len(), 0);
     }
 }

@@ -3,13 +3,14 @@ use redis::{Client, cmd, Commands, Connection, FromRedisValue, RedisResult, ToRe
 
 use std::collections::HashMap;
 
-use feature_flag::FeatureFlag;
+use feature_flag::{FeatureFlag, VariationValue};
 use hash_cache::HashCache;
 use store::{Store, StoreResult, StoreError};
 
 const FAIL: &'static [u8; 4] = &[102, 97, 105, 108];
 const ALL_CACHE: &'static str = "$all_flags$";
 
+#[derive(Clone)]
 pub struct RedisStore {
     key: String,
     client: Client,
@@ -218,8 +219,15 @@ impl Store for RedisStore {
         self.cleanup::<()>(&conn);
         res
     }
-}
 
+    fn init(&self, flags: HashMap<String, FeatureFlag>) -> StoreResult<()> {
+        for (key, flag) in flags {
+            self.upsert(key.as_str(), &flag);
+        }
+
+        Ok(())
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -238,7 +246,7 @@ mod tests {
             vec![],
             VariationOrRollOut::Variation(0),
             None,
-            vec![0, 1],
+            vec![VariationValue::Integer(0), VariationValue::Integer(1)],
             deleted,
         )
     }

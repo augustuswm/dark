@@ -7,7 +7,7 @@ pub fn main() {}
 #[cfg(test)]
 mod tests {
 
-    use dark::{FeatureFlag, RedisStore, Store, VariationOrRollOut};
+    use dark::{FeatureFlag, Polling, RedisStore, Requestor, Store, VariationOrRollOut};
 
     fn flag(key: &str, deleted: bool) -> FeatureFlag {
         FeatureFlag::new(
@@ -27,7 +27,27 @@ mod tests {
     }
 
     #[test]
+    fn test_polling() {
+        let store = RedisStore::open("0.0.0.0".into(), 6379, Some("example_flags".into()), None)
+            .unwrap();
+
+        let req = Requestor::new(
+            "https://app.launchdarkly.com",
+            "sdk-00617963-388b-4ad4-b3c0-a49d1027ab7e",
+        );
+
+        let poll = Polling::new(store.clone(), req, 5);
+
+        poll.run();
+
+        ::std::thread::sleep(::std::time::Duration::new(2, 0));
+
+        panic!("{:?}", store.get_all());
+    }
+
+    #[test]
     fn test_redis_store() {
+        unimplemented!();
         let r = RedisStore::open("0.0.0.0".into(), 6379, Some("example_flags".into()), None)
             .unwrap();
 
