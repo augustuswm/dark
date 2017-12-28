@@ -11,6 +11,7 @@ test = true
 
 [dependencies]
 chrono = "0.4"
+eventsource = { git = "https://github.com/augustuswm/eventsource.git" }
 futures = "0.1.17"
 log = "0.3.8"
 redis = "0.8.0"
