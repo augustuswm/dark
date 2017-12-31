@@ -2,6 +2,7 @@ use chrono::Utc;
 use redis::{Client, cmd, Commands, Connection, FromRedisValue, RedisResult, ToRedisArgs};
 
 use std::collections::HashMap;
+use std::time::{Duration, Instant};
 
 use feature_flag::{FeatureFlag, VariationValue};
 use hash_cache::HashCache;
@@ -16,7 +17,7 @@ pub struct RedisStore {
     client: Client,
     cache: HashCache<FeatureFlag>,
     all_cache: HashCache<HashMap<String, FeatureFlag>>,
-    timeout: u64,
+    timeout: Duration,
 }
 
 impl RedisStore {
@@ -24,7 +25,7 @@ impl RedisStore {
         host: String,
         port: u32,
         prefix: Option<String>,
-        timeout: Option<u64>,
+        timeout: Option<Duration>,
     ) -> StoreResult<RedisStore> {
         RedisStore::open_with_url(format!("redis://{}:{}", host, port), prefix, timeout)
     }
@@ -32,7 +33,7 @@ impl RedisStore {
     pub fn open_with_url(
         url: String,
         prefix: Option<String>,
-        timeout: Option<u64>,
+        timeout: Option<Duration>,
     ) -> StoreResult<RedisStore> {
         let client = Client::open(url.as_str()).map_err(
             |_| StoreError::InvalidRedisConfig,
@@ -44,20 +45,22 @@ impl RedisStore {
     pub fn open_with_client(
         client: Client,
         prefix: Option<String>,
-        timeout: Option<u64>,
+        timeout: Option<Duration>,
     ) -> RedisStore {
+        let dur = timeout.unwrap_or(Duration::new(0, 0));
+
         RedisStore {
             key: RedisStore::features_key(prefix),
             client: client,
-            cache: HashCache::new(),
-            all_cache: HashCache::new(),
-            timeout: timeout.unwrap_or(0),
+            cache: HashCache::new(dur),
+            all_cache: HashCache::new(dur),
+            timeout: dur,
         }
     }
 
-    fn expiration_starting_now(&self) -> i64 {
-        Utc::now().timestamp() + self.timeout as i64
-    }
+    // fn expiration_starting_now(&self) -> i64 {
+    //     Utc::now().timestamp() + self.timeout as i64
+    // }
 
     fn features_key(prefix: Option<String>) -> String {
         prefix.unwrap_or("launchdarkly".into()) + ":features"
@@ -88,7 +91,7 @@ impl RedisStore {
             self.all_cache.writer().remove(ALL_CACHE);
             self.cache.writer().insert(key.to_string(), (
                 flag.clone(),
-                self.expiration_starting_now(),
+                Instant::now(),
             ));
 
             res.map(|_| ()).map_err(StoreError::RedisFailure)
@@ -116,9 +119,7 @@ impl Store for RedisStore {
         // Checks individual cache
 
         if let Some(&(ref flag, exp)) = self.cache.reader().get(key) {
-            let now = Utc::now().timestamp();
-
-            if exp < now {
+            if exp.elapsed() > self.timeout {
                 return Some(flag.clone());
             }
         };
@@ -126,10 +127,10 @@ impl Store for RedisStore {
         self.conn().ok().and_then(|conn| {
             self.get_raw(key, &conn).and_then(|flag: FeatureFlag| {
                 if !flag.deleted() {
-                    self.cache.writer().insert(key.into(), (
-                        flag.clone(),
-                        self.expiration_starting_now(),
-                    ));
+                    self.cache.writer().insert(
+                        key.into(),
+                        (flag.clone(), Instant::now()),
+                    );
 
                     Some(flag)
                 } else {
@@ -144,9 +145,7 @@ impl Store for RedisStore {
         // Checks all cache
 
         if let Some(&(ref map, exp)) = self.all_cache.reader().get(ALL_CACHE) {
-            let now = Utc::now().timestamp();
-
-            if exp < now {
+            if exp.elapsed() > self.timeout {
                 return Ok(map.clone());
             }
         };
@@ -158,7 +157,7 @@ impl Store for RedisStore {
 
                 self.all_cache.writer().insert(ALL_CACHE.into(), (
                     map.clone(),
-                    self.expiration_starting_now(),
+                    Instant::now(),
                 ));
 
                 map
@@ -252,7 +251,8 @@ mod tests {
     }
 
     fn dataset() -> RedisStore {
-        let store = RedisStore::open("0.0.0.0".into(), 6379, None, Some(3600)).unwrap();
+        let store = RedisStore::open("0.0.0.0".into(), 6379, None, Some(Duration::new(6, 0)))
+            .unwrap();
         let flags = vec![flag("f1", 5, false), flag("f2", 5, true)];
 
         for flag in flags.into_iter() {

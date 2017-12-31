@@ -1,23 +1,34 @@
+use chrono::Utc;
+
 use std::collections::HashMap;
+use std::fmt::Debug;
 use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::time::{Duration, Instant};
 
 #[derive(Clone, Debug)]
 pub struct HashCache<T> {
-    cache: Arc<RwLock<HashMap<String, (T, i64)>>>,
+    cache: Arc<RwLock<HashMap<String, (T, Instant)>>>,
+    duration: Duration,
 }
 
-impl<T> From<HashMap<String, (T, i64)>> for HashCache<T> {
-    fn from(map: HashMap<String, (T, i64)>) -> HashCache<T> {
-        HashCache { cache: Arc::new(RwLock::new(map)) }
+impl<T> From<HashMap<String, (T, Instant)>> for HashCache<T> {
+    fn from(map: HashMap<String, (T, Instant)>) -> HashCache<T> {
+        HashCache {
+            cache: Arc::new(RwLock::new(map)),
+            duration: Duration::new(0, 0),
+        }
     }
 }
 
 impl<T> HashCache<T> {
-    pub fn new() -> HashCache<T> {
-        HashCache { cache: Arc::new(RwLock::new(HashMap::new())) }
+    pub fn new(duration: Duration) -> HashCache<T> {
+        HashCache {
+            cache: Arc::new(RwLock::new(HashMap::new())),
+            duration: duration,
+        }
     }
 
-    pub fn reader(&self) -> RwLockReadGuard<HashMap<String, (T, i64)>> {
+    pub fn reader(&self) -> RwLockReadGuard<HashMap<String, (T, Instant)>> {
         match self.cache.read() {
             Ok(guard) => guard,
             Err(err) => {
@@ -27,7 +38,7 @@ impl<T> HashCache<T> {
         }
     }
 
-    pub fn writer(&self) -> RwLockWriteGuard<HashMap<String, (T, i64)>> {
+    pub fn writer(&self) -> RwLockWriteGuard<HashMap<String, (T, Instant)>> {
         match self.cache.write() {
             Ok(guard) => guard,
             Err(err) => {
@@ -35,5 +46,38 @@ impl<T> HashCache<T> {
                 panic!("{:?}", err)
             }
         }
+    }
+}
+
+impl<T: Clone> HashCache<T> {
+    pub fn get<S: Into<String>>(&self, key: S) -> Option<T> {
+        let map = self.reader();
+        let entry = map.get(&key.into());
+
+        match entry {
+            Some(&(ref val, created)) => {
+                if created.elapsed() <= self.duration {
+                    Some(val.clone())
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_get() {
+        let cache = HashCache::new(Duration::new(5, 0));
+        cache.writer().insert(
+            "3".into(),
+            (vec![1, 2, 3], Instant::now()),
+        );
+        assert_eq!(Some(vec![1, 2, 3]), cache.get("3"));
     }
 }

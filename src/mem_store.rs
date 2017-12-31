@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::time::{Duration, Instant};
 
 use hash_cache::HashCache;
 use feature_flag::FeatureFlag;
@@ -10,7 +11,7 @@ pub struct MemStore {
 
 impl MemStore {
     pub fn new() -> MemStore {
-        MemStore { data: HashCache::new() }
+        MemStore { data: HashCache::new(Duration::new(0, 0)) }
     }
 
     fn get_raw(&self, key: &str) -> Option<FeatureFlag> {
@@ -18,8 +19,8 @@ impl MemStore {
     }
 }
 
-impl From<HashMap<String, (FeatureFlag, i64)>> for MemStore {
-    fn from(map: HashMap<String, (FeatureFlag, i64)>) -> MemStore {
+impl From<HashMap<String, (FeatureFlag, Instant)>> for MemStore {
+    fn from(map: HashMap<String, (FeatureFlag, Instant)>) -> MemStore {
         MemStore { data: map.into() }
     }
 }
@@ -52,7 +53,10 @@ impl Store for MemStore {
                 let mut replacement = flag.clone();
                 replacement.delete();
                 replacement.update_version(version);
-                self.data.writer().insert(key.into(), (replacement, 0));
+                self.data.writer().insert(
+                    key.into(),
+                    (replacement, Instant::now()),
+                );
                 Ok(())
             } else {
                 Err(StoreError::NewerVersionFound)
@@ -77,7 +81,10 @@ impl Store for MemStore {
             Ok(flag.clone())
         }?;
 
-        self.data.writer().insert(key.into(), (replacement, 0));
+        self.data.writer().insert(
+            key.into(),
+            (replacement, Instant::now()),
+        );
         Ok(())
     }
 
@@ -119,7 +126,7 @@ mod tests {
         let flags = vec![flag("f1", 5, false), flag("f2", 5, true)];
 
         for flag in flags.into_iter() {
-            map.insert(flag.key().into(), (flag, 0));
+            map.insert(flag.key().into(), (flag, Instant::now()));
         }
 
         map.into()
