@@ -67,14 +67,26 @@ impl<T: Clone> HashCache<T> {
         }
     }
 
+    pub fn get_all(&self) -> HashMap<String, T> {
+        let mut res: HashMap<String, T> = HashMap::new();
+
+        for (k, &(ref f, created)) in self.reader().iter() {
+            if self.ignore_dur() || created.elapsed() <= self.duration {
+                res.insert(k.clone(), f.clone());
+            }
+        }
+
+        res
+    }
+
     pub fn insert<S: Into<String>>(&self, key: S, val: T) -> Option<T> {
         self.writer()
             .insert(key.into(), (val, Instant::now()))
-            .map(|(v, e)| v)
+            .map(|(v, _)| v)
     }
 
     pub fn remove<'a, S: Into<&'a str>>(&self, key: S) -> Option<T> {
-        self.writer().remove(key.into()).map(|(v, e)| v)
+        self.writer().remove(key.into()).map(|(v, _)| v)
     }
 }
 

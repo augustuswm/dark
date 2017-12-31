@@ -131,14 +131,14 @@ impl Store for RedisStore {
         // Checks all cache
 
         if let Some(mut map) = self.all_cache.get(ALL_CACHE) {
-            map.retain(|k, flag| !flag.deleted());
+            map.retain(|_, flag| !flag.deleted());
             return Ok(map);
         };
 
         self.conn()?
             .hgetall(self.key.to_string())
             .map(|mut map: HashMap<String, FeatureFlag>| {
-                map.retain(|k, flag| !flag.deleted());
+                map.retain(|_, flag| !flag.deleted());
                 self.all_cache.insert(ALL_CACHE, map.clone());
                 map
             })

@@ -31,16 +31,10 @@ impl Store for MemStore {
     }
 
     fn get_all(&self) -> StoreResult<HashMap<String, FeatureFlag>> {
-        let data = self.data.reader();
-        let mut res: HashMap<String, FeatureFlag> = HashMap::new();
+        let mut map = self.data.get_all();
+        map.retain(|_, flag| !flag.deleted());
 
-        for (k, &(ref f, exp)) in data.iter() {
-            if !f.deleted() {
-                res.insert(k.clone(), f.clone());
-            }
-        }
-
-        Ok(res)
+        Ok(map)
     }
 
     fn delete(&self, key: &str, version: usize) -> StoreResult<()> {

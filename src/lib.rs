@@ -1,4 +1,4 @@
-#![allow(dead_code, unused_must_use, unused_variables, unused_mut)]
+#![allow(dead_code, unused_must_use)]
 
 extern crate chrono;
 extern crate eventsource;
