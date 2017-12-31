@@ -36,6 +36,7 @@ pub use redis_store::RedisStore;
 pub use request::Requestor;
 pub use store::{FeatureStore, Store, StoreError, StoreResult};
 pub use stream::Streaming;
+pub use user::{User, UserBuilder};
 
 #[cfg(test)]
 mod tests {}
