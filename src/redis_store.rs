@@ -58,10 +58,6 @@ impl RedisStore {
         }
     }
 
-    // fn expiration_starting_now(&self) -> i64 {
-    //     Utc::now().timestamp() + self.timeout as i64
-    // }
-
     fn features_key(prefix: Option<String>) -> String {
         prefix.unwrap_or("launchdarkly".into()) + ":features"
     }
@@ -75,7 +71,6 @@ impl RedisStore {
     }
 
     fn get_raw(&self, key: &str, conn: &Connection) -> Option<FeatureFlag> {
-
         conn.hget(self.key.to_string(), key.to_string()).ok()
     }
 
@@ -88,11 +83,8 @@ impl RedisStore {
             let res: RedisResult<u8> =
                 conn.hset(self.key.to_string(), flag.key().to_string(), flag_ser);
 
-            self.all_cache.writer().remove(ALL_CACHE);
-            self.cache.writer().insert(key.to_string(), (
-                flag.clone(),
-                Instant::now(),
-            ));
+            self.all_cache.remove(ALL_CACHE);
+            self.cache.insert(key, flag.clone());
 
             res.map(|_| ()).map_err(StoreError::RedisFailure)
         } else {
@@ -117,20 +109,15 @@ impl Store for RedisStore {
     fn get(&self, key: &str) -> Option<FeatureFlag> {
 
         // Checks individual cache
-
-        if let Some(&(ref flag, exp)) = self.cache.reader().get(key) {
-            if exp.elapsed() > self.timeout {
-                return Some(flag.clone());
-            }
+        let cached = self.cache.get(key);
+        if cached.is_some() {
+            return cached.and_then(|f| if !f.deleted() { Some(f) } else { None });
         };
 
         self.conn().ok().and_then(|conn| {
             self.get_raw(key, &conn).and_then(|flag: FeatureFlag| {
                 if !flag.deleted() {
-                    self.cache.writer().insert(
-                        key.into(),
-                        (flag.clone(), Instant::now()),
-                    );
+                    self.cache.insert(key, flag.clone());
 
                     Some(flag)
                 } else {
@@ -144,22 +131,16 @@ impl Store for RedisStore {
 
         // Checks all cache
 
-        if let Some(&(ref map, exp)) = self.all_cache.reader().get(ALL_CACHE) {
-            if exp.elapsed() > self.timeout {
-                return Ok(map.clone());
-            }
+        if let Some(mut map) = self.all_cache.get(ALL_CACHE) {
+            map.retain(|k, flag| !flag.deleted());
+            return Ok(map);
         };
 
         self.conn()?
             .hgetall(self.key.to_string())
             .map(|mut map: HashMap<String, FeatureFlag>| {
                 map.retain(|k, flag| !flag.deleted());
-
-                self.all_cache.writer().insert(ALL_CACHE.into(), (
-                    map.clone(),
-                    Instant::now(),
-                ));
-
+                self.all_cache.insert(ALL_CACHE, map.clone());
                 map
             })
             .map_err(StoreError::RedisFailure)

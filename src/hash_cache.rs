@@ -47,16 +47,20 @@ impl<T> HashCache<T> {
             }
         }
     }
+
+    fn ignore_dur(&self) -> bool {
+        self.duration.as_secs() as f64 + self.duration.subsec_nanos() as f64 == 0.0
+    }
 }
 
 impl<T: Clone> HashCache<T> {
-    pub fn get<S: Into<String>>(&self, key: S) -> Option<T> {
+    pub fn get<'a, S: Into<&'a str>>(&self, key: S) -> Option<T> {
         let map = self.reader();
-        let entry = map.get(&key.into());
+        let entry = map.get(key.into());
 
         match entry {
             Some(&(ref val, created)) => {
-                if created.elapsed() <= self.duration {
+                if self.ignore_dur() || created.elapsed() <= self.duration {
                     Some(val.clone())
                 } else {
                     None
@@ -64,6 +68,16 @@ impl<T: Clone> HashCache<T> {
             }
             _ => None,
         }
+    }
+
+    pub fn insert<S: Into<String>>(&self, key: S, val: T) -> Option<T> {
+        self.writer()
+            .insert(key.into(), (val, Instant::now()))
+            .map(|(v, e)| v)
+    }
+
+    pub fn remove<'a, S: Into<&'a str>>(&self, key: S) -> Option<T> {
+        self.writer().remove(key.into()).map(|(v, e)| v)
     }
 }
 

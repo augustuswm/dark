@@ -13,10 +13,6 @@ impl MemStore {
     pub fn new() -> MemStore {
         MemStore { data: HashCache::new(Duration::new(0, 0)) }
     }
-
-    fn get_raw(&self, key: &str) -> Option<FeatureFlag> {
-        self.data.reader().get(key).map(|&(ref f, exp)| f.clone())
-    }
 }
 
 impl From<HashMap<String, (FeatureFlag, Instant)>> for MemStore {
@@ -27,7 +23,7 @@ impl From<HashMap<String, (FeatureFlag, Instant)>> for MemStore {
 
 impl Store for MemStore {
     fn get(&self, key: &str) -> Option<FeatureFlag> {
-        self.get_raw(key).and_then(|f| if !f.deleted() {
+        self.data.get(key).and_then(|f| if !f.deleted() {
             Some(f)
         } else {
             None
@@ -48,15 +44,12 @@ impl Store for MemStore {
     }
 
     fn delete(&self, key: &str, version: usize) -> StoreResult<()> {
-        if let Some(flag) = self.get_raw(key) {
+        if let Some(flag) = self.get(key) {
             if flag.version() < version {
                 let mut replacement = flag.clone();
                 replacement.delete();
                 replacement.update_version(version);
-                self.data.writer().insert(
-                    key.into(),
-                    (replacement, Instant::now()),
-                );
+                self.data.insert(key, replacement);
                 Ok(())
             } else {
                 Err(StoreError::NewerVersionFound)
@@ -67,7 +60,7 @@ impl Store for MemStore {
     }
 
     fn upsert(&self, key: &str, flag: &FeatureFlag) -> StoreResult<()> {
-        let replacement = if let Some(e_flag) = self.get_raw(key) {
+        let replacement = if let Some(e_flag) = self.get(key) {
             if e_flag.version() < flag.version() {
                 Ok(flag.clone())
             } else {
@@ -81,10 +74,7 @@ impl Store for MemStore {
             Ok(flag.clone())
         }?;
 
-        self.data.writer().insert(
-            key.into(),
-            (replacement, Instant::now()),
-        );
+        self.data.insert(key, replacement);
         Ok(())
     }
 
