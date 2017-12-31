@@ -1,18 +1,19 @@
 use std::thread;
 use std::time::Duration;
+use std::sync::Arc;
 
 use feature_flag::FeatureFlag;
 use request::Requestor;
 use store::FeatureStore;
 
-pub struct Polling<S: 'static + FeatureStore> {
-    store: S,
-    req: Requestor,
+pub struct Polling {
+    store: Arc<FeatureStore>,
+    req: Arc<Requestor>,
     interval: i64,
 }
 
-impl<S: 'static + FeatureStore> Polling<S> {
-    pub fn new(store: S, req: Requestor, interval: i64) -> Polling<S> {
+impl Polling {
+    pub fn new(store: Arc<FeatureStore>, req: Arc<Requestor>, interval: i64) -> Polling {
         Polling {
             store: store,
             req: req,

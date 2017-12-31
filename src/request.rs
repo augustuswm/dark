@@ -21,7 +21,7 @@ pub enum RequestError {
 pub struct Requestor {
     client: Client,
     base_uri: String,
-    headers: Headers,
+    key: String,
 }
 
 // TODO: Does not implement any caching, retries, or backoff
@@ -32,14 +32,10 @@ impl Requestor {
         S: Into<String>,
         T: Into<String>,
     {
-        let mut headers = Headers::new();
-        headers.set(Authorization(key.into()));
-        headers.set(UserAgent::new("RustTest/".to_string() + VERSION));
-
         Requestor {
             client: Client::new(),
             base_uri: base_uri.into(),
-            headers: headers,
+            key: key.into(),
         }
     }
 
@@ -58,10 +54,14 @@ impl Requestor {
     where
         for<'de> T: Deserialize<'de>,
     {
+        let mut headers = Headers::new();
+        headers.set(Authorization(self.key.clone()));
+        headers.set(UserAgent::new("RustTest/".to_string() + VERSION));
+
         // Err(RequestError::Testing)
         let mut inter = self.client
             .get(endpoint.into().as_str())
-            .headers(self.headers.clone())
+            .headers(headers)
             .send()
             .map_err(RequestError::HTTPFailure)?;
         // panic!("{:?}", inter.text());

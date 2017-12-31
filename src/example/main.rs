@@ -9,6 +9,8 @@ mod tests {
 
     use dark::{FeatureFlag, Polling, RedisStore, Requestor, Store, Streaming, VariationOrRollOut};
 
+    use std::sync::Arc;
+
     fn flag(key: &str, deleted: bool) -> FeatureFlag {
         FeatureFlag::new(
             key.into(),
@@ -26,47 +28,53 @@ mod tests {
         )
     }
 
-    // #[test]
-    // fn test_polling() {
-    //     let store = RedisStore::open("0.0.0.0".into(), 6379, Some("example_flags".into()), None)
-    //         .unwrap();
-    //
-    //     let req = Requestor::new(
-    //         "https://app.launchdarkly.com",
-    //     );
-    //
-    //     let poll = Polling::new(store.clone(), req, 5);
-    //
-    //     poll.run();
-    //
-    //     ::std::thread::sleep(::std::time::Duration::new(2, 0));
-    //
-    //     panic!("{:?}", store.get_all());
-    // }
-    //
-    // #[test]
-    // fn test_streaming() {
-    //     let store = RedisStore::open("0.0.0.0".into(), 6379, Some("example_flags".into()), None)
-    //         .unwrap();
-    //
-    //     let req = Requestor::new(
-    //         "https://app.launchdarkly.com",
-    //     );
-    //
-    //     let stream = Streaming::new(store.clone(), req);
-    //
-    //     stream.run(
-    //         "https://stream.launchdarkly.com/flags",
-    //     );
-    //
-    //     ::std::thread::sleep(::std::time::Duration::new(2, 0));
-    //
-    //     panic!("{:?}", store.get_all());
-    // }
-    //
+    #[test]
+    fn test_polling() {
+        let store = Arc::new(
+            RedisStore::open("0.0.0.0".into(), 6379, Some("example_flags".into()), None)
+                .unwrap(),
+        );
+
+        let req = Arc::new(Requestor::new(
+            "https://app.launchdarkly.com",
+            "sdk-00617963-388b-4ad4-b3c0-a49d1027ab7e",
+        ));
+
+        let poll = Polling::new(store.clone(), req.clone(), 5);
+
+        poll.run();
+
+        ::std::thread::sleep(::std::time::Duration::new(2, 0));
+
+        // panic!("{:?}", store.get_all());
+    }
+
+    #[test]
+    fn test_streaming() {
+        let store = Arc::new(
+            RedisStore::open("0.0.0.0".into(), 6379, Some("example_flags".into()), None)
+                .unwrap(),
+        );
+
+        let req = Arc::new(Requestor::new(
+            "https://app.launchdarkly.com",
+            "sdk-00617963-388b-4ad4-b3c0-a49d1027ab7e",
+        ));
+
+        let stream = Streaming::new(store.clone(), req.clone());
+
+        stream.run(
+            "https://stream.launchdarkly.com/flags",
+            "sdk-00617963-388b-4ad4-b3c0-a49d1027ab7e",
+        );
+
+        ::std::thread::sleep(::std::time::Duration::new(2, 0));
+
+        // panic!("{:?}", store.get_all());
+    }
+
     // #[test]
     // fn test_redis_store() {
-    //     unimplemented!();
     //     let r = RedisStore::open("0.0.0.0".into(), 6379, Some("example_flags".into()), None)
     //         .unwrap();
     //
