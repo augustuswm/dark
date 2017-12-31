@@ -4,7 +4,6 @@ use serde::Deserialize;
 
 use std::collections::HashMap;
 
-use hash_cache::HashCache;
 use feature_flag::FeatureFlag;
 use VERSION;
 

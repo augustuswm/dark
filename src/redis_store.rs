@@ -1,10 +1,9 @@
-use chrono::Utc;
 use redis::{Client, cmd, Commands, Connection, FromRedisValue, RedisResult, ToRedisArgs};
 
 use std::collections::HashMap;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
-use feature_flag::{FeatureFlag, VariationValue};
+use feature_flag::FeatureFlag;
 use hash_cache::HashCache;
 use store::{Store, StoreResult, StoreError};
 

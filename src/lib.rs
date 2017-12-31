@@ -1,8 +1,7 @@
-#![allow(dead_code, unused_must_use, unused_variables, unused_imports, unused_mut)]
+#![allow(dead_code, unused_must_use, unused_variables, unused_mut)]
 
 extern crate chrono;
 extern crate eventsource;
-extern crate futures;
 #[macro_use]
 extern crate log;
 extern crate redis;
@@ -13,10 +12,8 @@ extern crate serde;
 extern crate serde_derive;
 extern crate serde_json;
 extern crate sha1;
-extern crate tokio_core;
 
 mod clause;
-mod comm;
 mod config;
 mod events;
 mod feature_flag;

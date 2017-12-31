@@ -1,13 +1,10 @@
 use chrono::Utc;
-use futures::Poll;
-use futures::stream::{Map, Stream};
-use reqwest::{Client, Error as ReqError};
+use reqwest::Client;
 use reqwest::header::{Authorization, ContentType, Headers, UserAgent};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json;
 
-use std::sync::{Arc, RwLock};
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::mpsc::{Receiver, Sender};
 use std::thread;
 
 use clause::Value;
@@ -179,7 +176,7 @@ impl EventSender {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::mpsc;
+    use std::sync::mpsc::channel;
 
     use events::*;
     use user::*;

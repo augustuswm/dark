@@ -2,7 +2,6 @@ use std::thread;
 use std::time::Duration;
 use std::sync::Arc;
 
-use feature_flag::FeatureFlag;
 use request::Requestor;
 use store::FeatureStore;
 

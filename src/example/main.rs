@@ -7,7 +7,7 @@ pub fn main() {}
 #[cfg(test)]
 mod tests {
 
-    use dark::{FeatureFlag, Polling, RedisStore, Requestor, Store, Streaming, VariationOrRollOut};
+    use dark::{FeatureFlag, Polling, RedisStore, Requestor, Streaming, VariationOrRollOut};
 
     use std::sync::Arc;
 

@@ -2,7 +2,6 @@ use eventsource::event::Event;
 use eventsource::reqwest::{Client, Error as EventSourceError};
 use reqwest::Url;
 use reqwest::header::{Authorization, Headers, UserAgent};
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json;
 use serde_json::Error as ParseError;
 
@@ -10,7 +9,6 @@ use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::thread;
-use std::time::Duration;
 
 use feature_flag::FeatureFlag;
 use request::{Requestor, RequestError};
