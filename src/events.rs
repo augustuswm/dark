@@ -7,12 +7,11 @@ use serde_json;
 use std::sync::mpsc::{Receiver, Sender};
 use std::thread;
 
-use clause::Value;
 use feature_flag::VariationValue;
 use user::User;
 use VERSION;
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 #[serde(untagged)]
 pub enum Event {
     FeatureRequest(FeatureRequestEvent),
@@ -68,7 +67,7 @@ pub struct FeatureRequestEvent {
     #[serde(skip_serializing_if = "Option::is_none")]
     value: Option<VariationValue>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    default: Option<Value>,
+    default: Option<VariationValue>,
     version: usize,
     #[serde(skip_serializing_if = "Option::is_none")]
     prereq_of: Option<String>,
@@ -79,7 +78,7 @@ impl<'a> FeatureRequestEvent {
         key: &str,
         user: &User,
         value: Option<VariationValue>,
-        default: Option<Value>,
+        default: Option<VariationValue>,
         version: usize,
         prereq_of: Option<String>,
     ) -> FeatureRequestEvent {
@@ -135,11 +134,11 @@ impl EventSender {
         self,
         endpoint: S,
         key: T,
-    ) -> Result<thread::JoinHandle<()>, EventError> {
+    ) -> thread::JoinHandle<()> {
         let k = key.into();
         let e = endpoint.into();
 
-        Ok(thread::spawn(move || {
+        thread::spawn(move || {
             let client = Client::new();
 
             let flush_interval = self.flush_interval;
@@ -170,7 +169,7 @@ impl EventSender {
                     start = Utc::now().timestamp();
                 }
             }
-        }))
+        })
     }
 }
 
@@ -190,7 +189,7 @@ mod tests {
         let processor = EventProcessor::new(true, 0, tx);
         let sender = EventSender::new(0, rx);
 
-        let handle = sender.run("https://0.0.0.0", "").unwrap();
+        let handle = sender.run("https://0.0.0.0", "");
 
         processor.push(Event::FeatureRequest(
             FeatureRequestEvent::new("level-1", &u, None, None, 1, None),

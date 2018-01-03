@@ -1,4 +1,4 @@
-#![allow(dead_code, unused_must_use)]
+#![allow(dead_code, unused_must_use, unused_imports, unused_variables)]
 
 extern crate chrono;
 extern crate eventsource;
@@ -14,6 +14,7 @@ extern crate serde_json;
 extern crate sha1;
 
 mod clause;
+mod client;
 mod config;
 mod events;
 mod feature_flag;
@@ -28,13 +29,14 @@ mod user;
 
 const VERSION: &'static str = "0.1.0";
 
+pub use client::Client;
 pub use config::{Config, ConfigBuilder};
 pub use feature_flag::{FeatureFlag, VariationOrRollOut};
 pub use mem_store::MemStore;
 pub use poll::Polling;
 pub use redis_store::RedisStore;
 pub use request::Requestor;
-pub use store::{FeatureStore, Store, StoreError, StoreResult};
+pub use store::{Store, StoreError, StoreResult};
 pub use stream::Streaming;
 pub use user::{User, UserBuilder};
 

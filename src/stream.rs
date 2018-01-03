@@ -12,7 +12,7 @@ use std::thread;
 
 use feature_flag::FeatureFlag;
 use request::{Requestor, RequestError};
-use store::{FeatureStore, StoreError};
+use store::{Store, StoreError};
 use VERSION;
 
 #[derive(Debug)]
@@ -72,13 +72,13 @@ impl Delete {
     }
 }
 
-pub struct Streaming {
-    store: Arc<FeatureStore>,
+pub struct Streaming<S: Store + 'static> {
+    store: Arc<S>,
     req: Arc<Requestor>,
 }
 
-impl Streaming {
-    pub fn new(store: Arc<FeatureStore>, req: Arc<Requestor>) -> Streaming {
+impl<S: Store> Streaming<S> {
+    pub fn new(store: Arc<S>, req: Arc<Requestor>) -> Streaming<S> {
         Streaming {
             store: store,
             req: req,

@@ -10,7 +10,6 @@ use store::{Store, StoreResult, StoreError};
 const FAIL: &'static [u8; 4] = &[102, 97, 105, 108];
 const ALL_CACHE: &'static str = "$all_flags$";
 
-#[derive(Clone)]
 pub struct RedisStore {
     key: String,
     client: Client,

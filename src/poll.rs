@@ -3,16 +3,16 @@ use std::time::Duration;
 use std::sync::Arc;
 
 use request::Requestor;
-use store::FeatureStore;
+use store::Store;
 
-pub struct Polling {
-    store: Arc<FeatureStore>,
+pub struct Polling<S: Store + 'static> {
+    store: Arc<S>,
     req: Arc<Requestor>,
     interval: i64,
 }
 
-impl Polling {
-    pub fn new(store: Arc<FeatureStore>, req: Arc<Requestor>, interval: i64) -> Polling {
+impl<S: Store> Polling<S> {
+    pub fn new(store: Arc<S>, req: Arc<Requestor>, interval: i64) -> Polling<S> {
         Polling {
             store: store,
             req: req,

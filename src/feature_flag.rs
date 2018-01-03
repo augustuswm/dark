@@ -1,9 +1,11 @@
 use redis::{ErrorKind, FromRedisValue, RedisResult, ToRedisArgs, Value as RedisValue};
 use serde_json;
 
+use std::sync::Arc;
+
 use clause::Clause;
-use events::FeatureRequestEvent;
-use store::FeatureStore;
+use events::{Event, FeatureRequestEvent};
+use store::Store;
 use user::User;
 
 pub type Variation = usize;
@@ -15,6 +17,30 @@ pub enum VariationValue {
     Integer(i64),
     Float(f64),
     String(String),
+}
+
+impl From<bool> for VariationValue {
+    fn from(val: bool) -> VariationValue {
+        VariationValue::Boolean(val)
+    }
+}
+
+impl From<i64> for VariationValue {
+    fn from(val: i64) -> VariationValue {
+        VariationValue::Integer(val)
+    }
+}
+
+impl From<f64> for VariationValue {
+    fn from(val: f64) -> VariationValue {
+        VariationValue::Float(val)
+    }
+}
+
+impl From<String> for VariationValue {
+    fn from(val: String) -> VariationValue {
+        VariationValue::String(val)
+    }
 }
 
 pub type FlagResult<T> = Result<T, FlagError>;
@@ -142,7 +168,7 @@ pub struct WeightedVariation {
 #[derive(Debug)]
 pub struct Eval {
     pub result: VariationResult,
-    pub events: Vec<FeatureRequestEvent>,
+    pub events: Vec<Event>,
 }
 
 #[derive(Clone, Debug)]
@@ -206,19 +232,22 @@ impl FeatureFlag {
         }
     }
 
-    pub fn evaluate<S: FeatureStore>(&self, user: &User, store: &S) -> Eval {
+    pub fn evaluate<S: Store>(&self, user: &User, store: &Arc<S>) -> Eval {
         let mut events = vec![];
 
         Eval {
             result: self.eval(user, store, &mut events),
-            events: events,
+            events: events
+                .into_iter()
+                .map(Event::FeatureRequest)
+                .collect::<Vec<Event>>(),
         }
     }
 
-    fn eval<S: FeatureStore>(
+    fn eval<S: Store>(
         &self,
         user: &User,
-        store: &S,
+        store: &Arc<S>,
         events: &mut Vec<FeatureRequestEvent>,
     ) -> VariationResult {
         let mut failed_prereq = None;
@@ -486,7 +515,7 @@ mod tests {
     #[test]
     fn test_prereq_does_not_exist() {
         let f1 = flag_with_prereq("keyA".into(), "keyB".into());
-        let store = MemStore::new();
+        let store = Arc::new(MemStore::new());
         let user = UserBuilder::new("userKey").build();
 
         store.upsert(f1.key(), &f1);
@@ -507,7 +536,7 @@ mod tests {
         let f1 = flag_with_prereq("key1".into(), "key2".into());
         let f2 = flag_with_prereq("key2".into(), "key3".into());
         let f3 = flag_off("key3".into());
-        let store = MemStore::new();
+        let store = Arc::new(MemStore::new());
         let user = UserBuilder::new("userKey").build();
 
         store.upsert(f1.key(), &f1);

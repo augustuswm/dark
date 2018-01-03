@@ -15,10 +15,7 @@ pub enum StoreError {
     RedisFailure(RedisError),
 }
 
-pub trait FeatureStore: Store + Sync + Send {}
-impl<T: Store + Sync + Send> FeatureStore for T {}
-
-pub trait Store {
+pub trait Store: Sync + Send {
     fn get(&self, key: &str) -> Option<FeatureFlag>;
     fn get_all(&self) -> StoreResult<HashMap<String, FeatureFlag>>;
     fn delete(&self, key: &str, version: usize) -> StoreResult<()>;

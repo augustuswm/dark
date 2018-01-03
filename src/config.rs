@@ -1,7 +1,8 @@
 use mem_store::MemStore;
-use store::FeatureStore;
+use redis_store::RedisStore;
+use store::Store;
 
-pub struct Config<T: FeatureStore> {
+pub struct Config<T: Store> {
     pub base_uri: String,
     pub stream_uri: String,
     pub events_uri: String,
@@ -17,17 +18,17 @@ pub struct Config<T: FeatureStore> {
     pub store: T,
 }
 
-pub struct ConfigBuilder<T: FeatureStore> {
+pub struct ConfigBuilder<T: Store> {
     config: Config<T>,
 }
 
-impl<T: FeatureStore> From<Config<T>> for ConfigBuilder<T> {
+impl<T: Store> From<Config<T>> for ConfigBuilder<T> {
     fn from(config: Config<T>) -> ConfigBuilder<T> {
         ConfigBuilder { config: config }
     }
 }
 
-impl<T: FeatureStore> From<ConfigBuilder<T>> for Config<T> {
+impl<T: Store> From<ConfigBuilder<T>> for Config<T> {
     fn from(builder: ConfigBuilder<T>) -> Config<T> {
         builder.build()
     }
@@ -55,7 +56,7 @@ impl ConfigBuilder<MemStore> {
     }
 }
 
-impl<T: FeatureStore> ConfigBuilder<T> {
+impl<T: Store> ConfigBuilder<T> {
     pub fn base_uri<S: Into<String>>(mut self, uri: S) -> Self {
         self.config.base_uri = uri.into();
         self
@@ -111,7 +112,15 @@ impl<T: FeatureStore> ConfigBuilder<T> {
         self
     }
 
-    pub fn store<S: FeatureStore>(self, store: S) -> ConfigBuilder<S> {
+    pub fn with_redis(self, store: RedisStore) -> ConfigBuilder<RedisStore> {
+        self.store(store)
+    }
+
+    pub fn without_redis(self) -> ConfigBuilder<MemStore> {
+        self.store(MemStore::new())
+    }
+
+    pub fn store<S: Store>(self, store: S) -> ConfigBuilder<S> {
         let config = self.build();
 
         ConfigBuilder {

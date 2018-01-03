@@ -2,7 +2,7 @@ use sha1::{Sha1, Digest};
 
 use std::collections::HashMap;
 
-use clause::Value;
+use feature_flag::VariationValue;
 
 static LONG_SCALE: u64 = 0xFFFFFFFFFFFFFFF;
 
@@ -129,7 +129,7 @@ pub struct User {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DerivedAttribute {
-    value: Value,
+    value: VariationValue,
     last_derived: u64,
 }
 

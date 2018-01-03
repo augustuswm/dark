@@ -1,4 +1,4 @@
-#![allow(dead_code, unused_must_use, unused_variables)]
+#![allow(dead_code, unused_must_use, unused_variables, unused_imports)]
 
 extern crate dark;
 
@@ -7,7 +7,8 @@ pub fn main() {}
 #[cfg(test)]
 mod tests {
 
-    use dark::{FeatureFlag, Polling, RedisStore, Requestor, Streaming, VariationOrRollOut};
+    use dark::{Client, Config, ConfigBuilder, FeatureFlag, MemStore, Polling, RedisStore,
+               Requestor, Store, Streaming, VariationOrRollOut};
 
     use std::sync::Arc;
 
@@ -29,11 +30,14 @@ mod tests {
     }
 
     #[test]
+    fn test_client() {
+        let config = ConfigBuilder::new().build();
+        let client = Client::new("key", config);
+    }
+
+    #[test]
     fn test_polling() {
-        let store = Arc::new(
-            RedisStore::open("0.0.0.0".into(), 6379, Some("example_flags".into()), None)
-                .unwrap(),
-        );
+        let store = Arc::new(MemStore::new());
 
         let req = Arc::new(Requestor::new(
             "https://app.launchdarkly.com",
@@ -46,15 +50,12 @@ mod tests {
 
         ::std::thread::sleep(::std::time::Duration::new(2, 0));
 
-        // panic!("{:?}", store.get_all());
+        panic!("{:?}", store.get_all());
     }
 
     #[test]
     fn test_streaming() {
-        let store = Arc::new(
-            RedisStore::open("0.0.0.0".into(), 6379, Some("example_flags".into()), None)
-                .unwrap(),
-        );
+        let store = Arc::new(MemStore::new());
 
         let req = Arc::new(Requestor::new(
             "https://app.launchdarkly.com",
@@ -70,7 +71,7 @@ mod tests {
 
         ::std::thread::sleep(::std::time::Duration::new(2, 0));
 
-        // panic!("{:?}", store.get_all());
+        panic!("{:?}", store.get_all());
     }
 
     // #[test]
