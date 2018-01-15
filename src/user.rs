@@ -1,4 +1,4 @@
-use sha1::{Sha1, Digest};
+use sha1::{Digest, Sha1};
 
 use std::collections::HashMap;
 
@@ -153,10 +153,9 @@ impl User {
                 .collect::<String>();
             let val_res = i64::from_str_radix(&hex[..15], 16);
 
-            val_res.ok().map_or(
-                0.0,
-                |val| val as f64 / LONG_SCALE as f64,
-            )
+            val_res
+                .ok()
+                .map_or(0.0, |val| val as f64 / LONG_SCALE as f64)
         } else {
             0.0
         }

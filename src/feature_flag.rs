@@ -95,27 +95,21 @@ impl Rule {
         key: &str,
         salt: &str,
     ) -> Option<Variation> {
-        self.variation_or_rollout.variation_index_for_user(
-            user,
-            key,
-            salt,
-        )
+        self.variation_or_rollout
+            .variation_index_for_user(user, key, salt)
     }
 
     pub fn matches_user(&self, user: &User) -> bool {
-        self.clauses.iter().fold(
-            true,
-            |pass, c| pass & c.matches_user(user),
-        )
+        self.clauses
+            .iter()
+            .fold(true, |pass, c| pass & c.matches_user(user))
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum VariationOrRollOut {
-    #[serde(rename = "rollout")]
-    Rollout(Rollout),
-    #[serde(rename = "variation")]
-    Variation(Variation),
+    #[serde(rename = "rollout")] Rollout(Rollout),
+    #[serde(rename = "variation")] Variation(Variation),
 }
 
 impl VariationOrRollOut {
@@ -271,9 +265,12 @@ impl FeatureFlag {
                         events.push(event);
 
                         if let Ok(val) = p_flag_eval.value {
-
                             if let Ok(var) = p_flag_var {
-                                if val == var { None } else { Some(prereq) }
+                                if val == var {
+                                    None
+                                } else {
+                                    Some(prereq)
+                                }
                             } else {
                                 Some(prereq)
                             }
@@ -298,11 +295,10 @@ impl FeatureFlag {
                 let index = self.eval_index(user);
 
                 VariationResult {
-                    value: index.value.ok_or(FlagError::FailedToEvalIndex).and_then(
-                        |value| {
-                            self.variation(value)
-                        },
-                    ),
+                    value: index
+                        .value
+                        .ok_or(FlagError::FailedToEvalIndex)
+                        .and_then(|value| self.variation(value)),
                     explanation: index.explanation,
                 }
             }
@@ -333,11 +329,8 @@ impl FeatureFlag {
         }
 
         IndexResult {
-            value: self.fallthrough.variation_index_for_user(
-                user,
-                self.key(),
-                self.salt(),
-            ),
+            value: self.fallthrough
+                .variation_index_for_user(user, self.key(), self.salt()),
             explanation: Explanation::VariationOrRollOut(self.fallthrough.clone()),
         }
     }
@@ -347,9 +340,11 @@ impl FeatureFlag {
     }
 
     pub fn variation(&self, i: usize) -> FlagResult<VariationValue> {
-        self.variations.iter().nth(i).map(|v| v.clone()).ok_or(
-            FlagError::InvalidVariationIndex,
-        )
+        self.variations
+            .iter()
+            .nth(i)
+            .map(|v| v.clone())
+            .ok_or(FlagError::InvalidVariationIndex)
     }
 
     pub fn key(&self) -> &str {
@@ -387,9 +382,8 @@ impl FromRedisValue for FeatureFlag {
             RedisValue::Data(ref data) => {
                 let data = String::from_utf8(data.clone());
 
-                data.or_else(|_| {
-                    Err((ErrorKind::TypeError, "Expected utf8 string").into())
-                }).and_then(|ser| {
+                data.or_else(|_| Err((ErrorKind::TypeError, "Expected utf8 string").into()))
+                    .and_then(|ser| {
                         serde_json::from_str(ser.as_str()).or_else(|_| {
                             let err = (
                                 ErrorKind::TypeError,

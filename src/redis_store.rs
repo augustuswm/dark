@@ -1,11 +1,11 @@
-use redis::{Client, cmd, Commands, Connection, FromRedisValue, RedisResult, ToRedisArgs};
+use redis::{cmd, Client, Commands, Connection, FromRedisValue, RedisResult, ToRedisArgs};
 
 use std::collections::HashMap;
 use std::time::Duration;
 
 use feature_flag::FeatureFlag;
 use hash_cache::HashCache;
-use store::{Store, StoreResult, StoreError};
+use store::{Store, StoreError, StoreResult};
 
 const FAIL: &'static [u8; 4] = &[102, 97, 105, 108];
 const ALL_CACHE: &'static str = "$all_flags$";
@@ -33,9 +33,7 @@ impl RedisStore {
         prefix: Option<String>,
         timeout: Option<Duration>,
     ) -> StoreResult<RedisStore> {
-        let client = Client::open(url.as_str()).map_err(
-            |_| StoreError::InvalidRedisConfig,
-        )?;
+        let client = Client::open(url.as_str()).map_err(|_| StoreError::InvalidRedisConfig)?;
 
         Ok(RedisStore::open_with_client(client, prefix, timeout))
     }
@@ -61,11 +59,10 @@ impl RedisStore {
     }
 
     fn conn(&self) -> StoreResult<Connection> {
-
         // Get a single connection to group requests on
-        self.client.get_connection().map_err(
-            StoreError::RedisFailure,
-        )
+        self.client
+            .get_connection()
+            .map_err(StoreError::RedisFailure)
     }
 
     fn get_raw(&self, key: &str, conn: &Connection) -> Option<FeatureFlag> {
@@ -73,7 +70,6 @@ impl RedisStore {
     }
 
     fn put(&self, key: &str, flag: &FeatureFlag, conn: &Connection) -> StoreResult<()> {
-
         // Manually serialize to redis storable value to allow for failure handling
         let flag_ser = flag.to_redis_args();
 
@@ -91,13 +87,11 @@ impl RedisStore {
     }
 
     fn start<T: FromRedisValue>(&self, key: &str, conn: &Connection) -> StoreResult<()> {
-
         let res: RedisResult<T> = cmd("WATCH").arg(key).query(conn);
         res.map(|_| ()).map_err(StoreError::RedisFailure)
     }
 
     fn cleanup<T: FromRedisValue>(&self, conn: &Connection) -> StoreResult<()> {
-
         let res: RedisResult<T> = cmd("UNWATCH").query(conn);
         res.map(|_| ()).map_err(StoreError::RedisFailure)
     }
@@ -105,7 +99,6 @@ impl RedisStore {
 
 impl Store for RedisStore {
     fn get(&self, key: &str) -> Option<FeatureFlag> {
-
         // Checks individual cache
         let cached = self.cache.get(key);
         if cached.is_some() {
@@ -126,7 +119,6 @@ impl Store for RedisStore {
     }
 
     fn get_all(&self) -> StoreResult<HashMap<String, FeatureFlag>> {
-
         // Checks all cache
 
         if let Some(mut map) = self.all_cache.get(ALL_CACHE) {
@@ -145,7 +137,6 @@ impl Store for RedisStore {
     }
 
     fn delete(&self, key: &str, version: usize) -> StoreResult<()> {
-
         // Ignores cache lookup
 
         let conn = self.conn()?;
@@ -171,7 +162,6 @@ impl Store for RedisStore {
     }
 
     fn upsert(&self, key: &str, flag: &FeatureFlag) -> StoreResult<()> {
-
         // Ignores cache lookup
 
         let conn = self.conn()?;
@@ -230,8 +220,8 @@ mod tests {
     }
 
     fn dataset() -> RedisStore {
-        let store = RedisStore::open("0.0.0.0".into(), 6379, None, Some(Duration::new(6, 0)))
-            .unwrap();
+        let store =
+            RedisStore::open("0.0.0.0".into(), 6379, None, Some(Duration::new(6, 0))).unwrap();
         let flags = vec![flag("f1", 5, false), flag("f2", 5, true)];
 
         for flag in flags.into_iter() {

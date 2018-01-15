@@ -51,13 +51,17 @@ impl<S: Store> Client<S> {
                 store: store,
             }
         } else {
-            let req = Arc::new(Requestor::new(config.base_uri, key));
+            let update_handle = if !config.offline {
+                let req = Requestor::new(config.base_uri, key);
 
-            let update_handle = if config.stream {
-                let stream = Streaming::new(store.clone(), req.clone());
-                stream.run(config.stream_uri.as_str(), key).unwrap()
+                Some(if config.stream {
+                    let stream = Streaming::new(store.clone(), req.into());
+                    stream.run(config.stream_uri.as_str(), key).unwrap()
+                } else {
+                    Polling::new(store.clone(), req.into(), config.poll_interval).run()
+                })
             } else {
-                Polling::new(store.clone(), req.clone(), config.poll_interval).run()
+                None
             };
 
             let (tx, rx) = channel();
@@ -66,14 +70,18 @@ impl<S: Store> Client<S> {
                 config.sampling_interval,
                 tx,
             );
-            let e_sender = EventSender::new(config.flush_interval, rx);
-            let e_handle = e_sender.run(config.events_uri, key);
+
+            let e_handle = if !config.offline && config.send_events {
+                Some(EventSender::new(config.flush_interval, rx).run(config.events_uri, key))
+            } else {
+                None
+            };
 
             Client {
                 offline: config.offline,
                 event_processor: Some(e_processor),
-                event_handle: Some(e_handle),
-                update_handle: Some(update_handle),
+                event_handle: e_handle,
+                update_handle: update_handle,
                 store: store,
             }
         }
@@ -98,9 +106,8 @@ impl<S: Store> Client<S> {
         }
 
         if let Some(flag) = self.flag(key, user) {
-            self.eval(&flag, user).unwrap_or(
-                (default.into(), Some(flag.version())),
-            )
+            self.eval(&flag, user)
+                .unwrap_or((default.into(), Some(flag.version())))
         } else {
             (default.into(), None)
         }
@@ -150,18 +157,20 @@ impl<S: Store> Client<S> {
     }
 
     fn variation(&self, key: &str, user: &User) -> Option<VariationValue> {
-        self.flag(key, user).and_then(|flag| {
-            self.eval(&flag, user).map(|(variation, _)| variation).ok()
-        })
+        self.flag(key, user)
+            .and_then(|flag| self.eval(&flag, user).map(|(variation, _)| variation).ok())
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use client::Client;
+    use config::{Config, ConfigBuilder};
 
     #[test]
     fn test_offline_returns_default() {
+        let config = ConfigBuilder::new().offline(true).build();
+        let client = Client::new("abcdefg", config);
         unimplemented!()
     }
 

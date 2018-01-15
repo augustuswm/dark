@@ -191,9 +191,14 @@ mod tests {
 
         let handle = sender.run("https://0.0.0.0", "");
 
-        processor.push(Event::FeatureRequest(
-            FeatureRequestEvent::new("level-1", &u, None, None, 1, None),
-        ));
+        processor.push(Event::FeatureRequest(FeatureRequestEvent::new(
+            "level-1",
+            &u,
+            None,
+            None,
+            1,
+            None,
+        )));
 
         // Wait to make sure the sender ticks
         ::std::thread::sleep(::std::time::Duration::new(2, 0));

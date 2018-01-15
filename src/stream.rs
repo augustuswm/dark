@@ -11,7 +11,7 @@ use std::sync::Arc;
 use std::thread;
 
 use feature_flag::FeatureFlag;
-use request::{Requestor, RequestError};
+use request::{RequestError, Requestor};
 use store::{Store, StoreError};
 use VERSION;
 
@@ -95,12 +95,14 @@ impl<S: Store> Streaming<S> {
 
             client.default_headers = headers;
 
-            Ok(thread::spawn(move || for msg in client {
-                msg.map_err(StreamError::EventSource).and_then(|event| {
-                    Self::get_event_type(&event).and_then(|event_type| {
-                        self.process_data(&event_type, event.data.as_str())
-                    })
-                });
+            Ok(thread::spawn(move || {
+                for msg in client {
+                    msg.map_err(StreamError::EventSource).and_then(|event| {
+                        Self::get_event_type(&event).and_then(|event_type| {
+                            self.process_data(&event_type, event.data.as_str())
+                        })
+                    });
+                }
             }))
         } else {
             Err(())
@@ -122,28 +124,22 @@ impl<S: Store> Streaming<S> {
                 self.store.init(flags).map_err(StreamError::Storage)
             }
             StreamEventType::Patch => {
-                let patch = serde_json::from_str::<Patch>(data).map_err(
-                    StreamError::ParseData,
-                )?;
-                self.store.upsert(patch.key(), &patch.flag).map_err(
-                    StreamError::Storage,
-                )
+                let patch = serde_json::from_str::<Patch>(data).map_err(StreamError::ParseData)?;
+                self.store
+                    .upsert(patch.key(), &patch.flag)
+                    .map_err(StreamError::Storage)
             }
             StreamEventType::Delete => {
-                let delete = serde_json::from_str::<Delete>(data).map_err(
-                    StreamError::ParseData,
-                )?;
-                self.store.delete(delete.key(), delete.version).map_err(
-                    StreamError::Storage,
-                )
+                let delete = serde_json::from_str::<Delete>(data).map_err(StreamError::ParseData)?;
+                self.store
+                    .delete(delete.key(), delete.version)
+                    .map_err(StreamError::Storage)
             }
-            StreamEventType::IndirectPatch => {
-                match self.req.get(data) {
-                    Ok(Some(flag)) => self.store.upsert(data, &flag).map_err(StreamError::Storage),
-                    Ok(None) => Err(StreamError::FlagNotFound),
-                    Err(err) => Err(StreamError::Request(err)),
-                }
-            }
+            StreamEventType::IndirectPatch => match self.req.get(data) {
+                Ok(Some(flag)) => self.store.upsert(data, &flag).map_err(StreamError::Storage),
+                Ok(None) => Err(StreamError::FlagNotFound),
+                Err(err) => Err(StreamError::Request(err)),
+            },
         }
     }
 }

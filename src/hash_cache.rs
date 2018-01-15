@@ -97,10 +97,9 @@ mod tests {
     #[test]
     fn test_get() {
         let cache = HashCache::new(Duration::new(5, 0));
-        cache.writer().insert(
-            "3".into(),
-            (vec![1, 2, 3], Instant::now()),
-        );
+        cache
+            .writer()
+            .insert("3".into(), (vec![1, 2, 3], Instant::now()));
         assert_eq!(Some(vec![1, 2, 3]), cache.get("3"));
     }
 }

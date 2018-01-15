@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 
 use hash_cache::HashCache;
 use feature_flag::FeatureFlag;
-use store::{Store, StoreResult, StoreError};
+use store::{Store, StoreError, StoreResult};
 
 pub struct MemStore {
     data: HashCache<FeatureFlag>,
@@ -11,7 +11,9 @@ pub struct MemStore {
 
 impl MemStore {
     pub fn new() -> MemStore {
-        MemStore { data: HashCache::new(Duration::new(0, 0)) }
+        MemStore {
+            data: HashCache::new(Duration::new(0, 0)),
+        }
     }
 }
 
@@ -23,11 +25,9 @@ impl From<HashMap<String, (FeatureFlag, Instant)>> for MemStore {
 
 impl Store for MemStore {
     fn get(&self, key: &str) -> Option<FeatureFlag> {
-        self.data.get(key).and_then(|f| if !f.deleted() {
-            Some(f)
-        } else {
-            None
-        })
+        self.data
+            .get(key)
+            .and_then(|f| if !f.deleted() { Some(f) } else { None })
     }
 
     fn get_all(&self) -> StoreResult<HashMap<String, FeatureFlag>> {

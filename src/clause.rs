@@ -15,7 +15,6 @@ pub struct Clause {
 impl Clause {
     pub fn matches_user(&self, user: &User) -> bool {
         if let Some(val) = user.get_for_eval(self.attribute.as_str()) {
-
             // TODO: Add handling for non-string values coming from user data
             self.handle_negate(self.match_any(VariationValue::String(val.into())))
         } else {
@@ -24,13 +23,17 @@ impl Clause {
     }
 
     pub fn match_any(&self, val: VariationValue) -> bool {
-        self.values.iter().fold(false, |pass, v| {
-            pass || self.op.apply(v, &val)
-        })
+        self.values
+            .iter()
+            .fold(false, |pass, v| pass || self.op.apply(v, &val))
     }
 
     fn handle_negate(&self, status: bool) -> bool {
-        if self.negate { !status } else { status }
+        if self.negate {
+            !status
+        } else {
+            status
+        }
     }
 }
 
@@ -52,129 +55,99 @@ pub enum Operator {
 impl Operator {
     pub fn apply(&self, a: &VariationValue, b: &VariationValue) -> bool {
         match *self {
-            Operator::In => {
-                match (a, b) {
-                    (&VariationValue::Integer(ref a_v), &VariationValue::Float(ref b_v)) => {
-                        (*a_v as f64) == *b_v as f64
-                    }
-                    (&VariationValue::Float(ref a_v), &VariationValue::Integer(ref b_v)) => {
-                        (*a_v as f64) == *b_v as f64
-                    }
-                    (ref a, ref b) => a == b,
+            Operator::In => match (a, b) {
+                (&VariationValue::Integer(ref a_v), &VariationValue::Float(ref b_v)) => {
+                    (*a_v as f64) == *b_v as f64
                 }
-            }
-            Operator::StartsWith => {
-                match (a, b) {
-                    (&VariationValue::String(ref a_v), &VariationValue::String(ref b_v)) => {
-                        a_v.as_str().starts_with(b_v.as_str())
-                    }
-                    _ => false,
+                (&VariationValue::Float(ref a_v), &VariationValue::Integer(ref b_v)) => {
+                    (*a_v as f64) == *b_v as f64
                 }
-            }
-            Operator::EndsWith => {
-                match (a, b) {
-                    (&VariationValue::String(ref a_v), &VariationValue::String(ref b_v)) => {
-                        a_v.as_str().ends_with(b_v.as_str())
-                    }
-                    _ => false,
+                (ref a, ref b) => a == b,
+            },
+            Operator::StartsWith => match (a, b) {
+                (&VariationValue::String(ref a_v), &VariationValue::String(ref b_v)) => {
+                    a_v.as_str().starts_with(b_v.as_str())
                 }
-            }
-            Operator::Matches => {
-                match (a, b) {
-                    (&VariationValue::String(ref a_v), &VariationValue::String(ref b_v)) => {
-                        if let Ok(re) = Regex::new(b_v) {
-                            re.is_match(a_v)
-                        } else {
-                            false
-                        }
-                    }
-                    _ => false,
+                _ => false,
+            },
+            Operator::EndsWith => match (a, b) {
+                (&VariationValue::String(ref a_v), &VariationValue::String(ref b_v)) => {
+                    a_v.as_str().ends_with(b_v.as_str())
                 }
-            }
-            Operator::Contains => {
-                match (a, b) {
-                    (&VariationValue::String(ref a_v), &VariationValue::String(ref b_v)) => {
-                        a_v.as_str().contains(b_v.as_str())
+                _ => false,
+            },
+            Operator::Matches => match (a, b) {
+                (&VariationValue::String(ref a_v), &VariationValue::String(ref b_v)) => {
+                    if let Ok(re) = Regex::new(b_v) {
+                        re.is_match(a_v)
+                    } else {
+                        false
                     }
-                    _ => false,
                 }
-            }
-            Operator::LessThan => {
-                match (a, b) {
-                    (&VariationValue::Integer(ref a_v), &VariationValue::Float(ref b_v)) => {
-                        (*a_v as f64) < *b_v as f64
-                    }
-                    (&VariationValue::Float(ref a_v), &VariationValue::Integer(ref b_v)) => {
-                        (*a_v as f64) < *b_v as f64
-                    }
-                    (&VariationValue::Integer(ref a_v), &VariationValue::Integer(ref b_v)) => {
-                        a_v < b_v
-                    }
-                    (&VariationValue::Float(ref a_v), &VariationValue::Float(ref b_v)) => a_v < b_v,
-                    _ => false,
+                _ => false,
+            },
+            Operator::Contains => match (a, b) {
+                (&VariationValue::String(ref a_v), &VariationValue::String(ref b_v)) => {
+                    a_v.as_str().contains(b_v.as_str())
                 }
-            }
-            Operator::LessThanOrEqual => {
-                match (a, b) {
-                    (&VariationValue::Integer(ref a_v), &VariationValue::Float(ref b_v)) => {
-                        (*a_v as f64) <= *b_v as f64
-                    }
-                    (&VariationValue::Float(ref a_v), &VariationValue::Integer(ref b_v)) => {
-                        (*a_v as f64) <= *b_v as f64
-                    }
-                    (&VariationValue::Integer(ref a_v), &VariationValue::Integer(ref b_v)) => {
-                        a_v <= b_v
-                    }
-                    (&VariationValue::Float(ref a_v), &VariationValue::Float(ref b_v)) => {
-                        a_v <= b_v
-                    }
-                    _ => false,
+                _ => false,
+            },
+            Operator::LessThan => match (a, b) {
+                (&VariationValue::Integer(ref a_v), &VariationValue::Float(ref b_v)) => {
+                    (*a_v as f64) < *b_v as f64
                 }
-            }
-            Operator::GreaterThan => {
-                match (a, b) {
-                    (&VariationValue::Integer(ref a_v), &VariationValue::Float(ref b_v)) => {
-                        (*a_v as f64) > *b_v as f64
-                    }
-                    (&VariationValue::Float(ref a_v), &VariationValue::Integer(ref b_v)) => {
-                        (*a_v as f64) > *b_v as f64
-                    }
-                    (&VariationValue::Integer(ref a_v), &VariationValue::Integer(ref b_v)) => {
-                        a_v > b_v
-                    }
-                    (&VariationValue::Float(ref a_v), &VariationValue::Float(ref b_v)) => a_v > b_v,
-                    _ => false,
+                (&VariationValue::Float(ref a_v), &VariationValue::Integer(ref b_v)) => {
+                    (*a_v as f64) < *b_v as f64
                 }
-            }
-            Operator::GreaterThanOrEqual => {
-                match (a, b) {
-                    (&VariationValue::Integer(ref a_v), &VariationValue::Float(ref b_v)) => {
-                        (*a_v as f64) >= *b_v as f64
-                    }
-                    (&VariationValue::Float(ref a_v), &VariationValue::Integer(ref b_v)) => {
-                        (*a_v as f64) >= *b_v as f64
-                    }
-                    (&VariationValue::Integer(ref a_v), &VariationValue::Integer(ref b_v)) => {
-                        a_v >= b_v
-                    }
-                    (&VariationValue::Float(ref a_v), &VariationValue::Float(ref b_v)) => {
-                        a_v >= b_v
-                    }
-                    _ => false,
+                (&VariationValue::Integer(ref a_v), &VariationValue::Integer(ref b_v)) => a_v < b_v,
+                (&VariationValue::Float(ref a_v), &VariationValue::Float(ref b_v)) => a_v < b_v,
+                _ => false,
+            },
+            Operator::LessThanOrEqual => match (a, b) {
+                (&VariationValue::Integer(ref a_v), &VariationValue::Float(ref b_v)) => {
+                    (*a_v as f64) <= *b_v as f64
                 }
-            }
-            Operator::Before => {
-                match (value_to_time(a), value_to_time(b)) {
-                    (Some(date_a), Some(date_b)) => date_a < date_b,
-                    _ => false,
+                (&VariationValue::Float(ref a_v), &VariationValue::Integer(ref b_v)) => {
+                    (*a_v as f64) <= *b_v as f64
                 }
-            }
-            Operator::After => {
-                match (value_to_time(a), value_to_time(b)) {
-                    (Some(date_a), Some(date_b)) => date_a > date_b,
-                    _ => false,
+                (&VariationValue::Integer(ref a_v), &VariationValue::Integer(ref b_v)) => {
+                    a_v <= b_v
                 }
-            }
+                (&VariationValue::Float(ref a_v), &VariationValue::Float(ref b_v)) => a_v <= b_v,
+                _ => false,
+            },
+            Operator::GreaterThan => match (a, b) {
+                (&VariationValue::Integer(ref a_v), &VariationValue::Float(ref b_v)) => {
+                    (*a_v as f64) > *b_v as f64
+                }
+                (&VariationValue::Float(ref a_v), &VariationValue::Integer(ref b_v)) => {
+                    (*a_v as f64) > *b_v as f64
+                }
+                (&VariationValue::Integer(ref a_v), &VariationValue::Integer(ref b_v)) => a_v > b_v,
+                (&VariationValue::Float(ref a_v), &VariationValue::Float(ref b_v)) => a_v > b_v,
+                _ => false,
+            },
+            Operator::GreaterThanOrEqual => match (a, b) {
+                (&VariationValue::Integer(ref a_v), &VariationValue::Float(ref b_v)) => {
+                    (*a_v as f64) >= *b_v as f64
+                }
+                (&VariationValue::Float(ref a_v), &VariationValue::Integer(ref b_v)) => {
+                    (*a_v as f64) >= *b_v as f64
+                }
+                (&VariationValue::Integer(ref a_v), &VariationValue::Integer(ref b_v)) => {
+                    a_v >= b_v
+                }
+                (&VariationValue::Float(ref a_v), &VariationValue::Float(ref b_v)) => a_v >= b_v,
+                _ => false,
+            },
+            Operator::Before => match (value_to_time(a), value_to_time(b)) {
+                (Some(date_a), Some(date_b)) => date_a < date_b,
+                _ => false,
+            },
+            Operator::After => match (value_to_time(a), value_to_time(b)) {
+                (Some(date_a), Some(date_b)) => date_a > date_b,
+                _ => false,
+            },
         }
     }
 }
@@ -190,8 +163,7 @@ impl Operator {
 impl VariationValue {
     pub fn is_numeric(&self) -> bool {
         match *self {
-            VariationValue::Integer(_) |
-            VariationValue::Float(_) => true,
+            VariationValue::Integer(_) | VariationValue::Float(_) => true,
             _ => false,
         }
     }
@@ -231,31 +203,16 @@ mod tests {
     #[test]
     fn test_op_in() {
         assert!(Operator::In.apply(
-            &VariationValue::String(
-                "A string to match".into(),
-            ),
-            &VariationValue::String(
-                "A string to match".into(),
-            ),
+            &VariationValue::String("A string to match".into(),),
+            &VariationValue::String("A string to match".into(),),
         ));
         assert!(!Operator::In.apply(
-            &VariationValue::String(
-                "A string to match".into(),
-            ),
+            &VariationValue::String("A string to match".into(),),
             &VariationValue::Boolean(true),
         ));
-        assert!(Operator::In.apply(
-            &VariationValue::Integer(34),
-            &VariationValue::Integer(34),
-        ));
-        assert!(Operator::In.apply(
-            &VariationValue::Integer(34),
-            &VariationValue::Float(34.0),
-        ));
-        assert!(!Operator::In.apply(
-            &VariationValue::Integer(34),
-            &VariationValue::Boolean(true),
-        ));
+        assert!(Operator::In.apply(&VariationValue::Integer(34), &VariationValue::Integer(34),));
+        assert!(Operator::In.apply(&VariationValue::Integer(34), &VariationValue::Float(34.0),));
+        assert!(!Operator::In.apply(&VariationValue::Integer(34), &VariationValue::Boolean(true),));
         assert!(Operator::In.apply(
             &VariationValue::Boolean(false),
             &VariationValue::Boolean(false),
@@ -281,21 +238,15 @@ mod tests {
             &VariationValue::String("end".into()),
         ));
         assert!(Operator::EndsWith.apply(
-            &VariationValue::String(
-                "plus more end".into(),
-            ),
+            &VariationValue::String("plus more end".into(),),
             &VariationValue::String("end".into()),
         ));
         assert!(!Operator::EndsWith.apply(
-            &VariationValue::String(
-                "does not contain".into(),
-            ),
+            &VariationValue::String("does not contain".into(),),
             &VariationValue::String("end".into()),
         ));
         assert!(!Operator::EndsWith.apply(
-            &VariationValue::String(
-                "does not end with".into(),
-            ),
+            &VariationValue::String("does not end with".into(),),
             &VariationValue::String("end".into()),
         ));
         assert!(!Operator::EndsWith.apply(
@@ -331,21 +282,15 @@ mod tests {
             &VariationValue::String("start".into()),
         ));
         assert!(Operator::StartsWith.apply(
-            &VariationValue::String(
-                "start plus more".into(),
-            ),
+            &VariationValue::String("start plus more".into(),),
             &VariationValue::String("start".into()),
         ));
         assert!(!Operator::StartsWith.apply(
-            &VariationValue::String(
-                "does not contain".into(),
-            ),
+            &VariationValue::String("does not contain".into(),),
             &VariationValue::String("start".into()),
         ));
         assert!(!Operator::StartsWith.apply(
-            &VariationValue::String(
-                "does not start with".into(),
-            ),
+            &VariationValue::String("does not start with".into(),),
             &VariationValue::String("start".into()),
         ));
         assert!(!Operator::StartsWith.apply(
@@ -389,8 +334,7 @@ mod tests {
         assert!(!Operator::Matches.apply(
             &VariationValue::String("barn".into()),
             &VariationValue::String(
-                "(\\W|^)(baloney|darn|drat|fooey|gosh\\sdarnit|heck)(\\W|$)"
-                    .into(),
+                "(\\W|^)(baloney|darn|drat|fooey|gosh\\sdarnit|heck)(\\W|$)".into(),
             ),
         ));
     }
@@ -402,15 +346,11 @@ mod tests {
             &VariationValue::String("contain".into()),
         ));
         assert!(Operator::Contains.apply(
-            &VariationValue::String(
-                "contain plus more".into(),
-            ),
+            &VariationValue::String("contain plus more".into(),),
             &VariationValue::String("contain".into()),
         ));
         assert!(!Operator::Contains.apply(
-            &VariationValue::String(
-                "does not".into(),
-            ),
+            &VariationValue::String("does not".into(),),
             &VariationValue::String("contain".into()),
         ));
         assert!(!Operator::Contains.apply(
@@ -446,65 +386,65 @@ mod tests {
             (
                 VariationValue::Integer(1),
                 VariationValue::Integer(0),
-                false
+                false,
             ),
             (
                 VariationValue::Integer(0),
                 VariationValue::Integer(0),
-                false
+                false,
             ),
             (VariationValue::Float(0.0), VariationValue::Float(1.0), true),
             (
                 VariationValue::Float(1.0),
                 VariationValue::Float(0.0),
-                false
+                false,
             ),
             (
                 VariationValue::Float(0.0),
                 VariationValue::Float(0.0),
-                false
+                false,
             ),
             (VariationValue::Integer(0), VariationValue::Float(1.0), true),
             (
                 VariationValue::Integer(1),
                 VariationValue::Float(0.0),
-                false
+                false,
             ),
             (
                 VariationValue::Integer(0),
                 VariationValue::Float(0.0),
-                false
+                false,
             ),
             (VariationValue::Float(0.0), VariationValue::Integer(1), true),
             (
                 VariationValue::Float(1.0),
                 VariationValue::Integer(0),
-                false
+                false,
             ),
             (
                 VariationValue::Float(0.0),
                 VariationValue::Integer(0),
-                false
+                false,
             ),
             (
                 VariationValue::String("".into()),
                 VariationValue::Integer(0),
-                false
+                false,
             ),
             (
                 VariationValue::Integer(0),
                 VariationValue::String("".into()),
-                false
+                false,
             ),
             (
                 VariationValue::Boolean(true),
                 VariationValue::Integer(1),
-                false
+                false,
             ),
             (
                 VariationValue::Integer(1),
                 VariationValue::Boolean(true),
-                false
+                false,
             ),
         ];
 
@@ -520,49 +460,49 @@ mod tests {
             (
                 VariationValue::Integer(1),
                 VariationValue::Integer(0),
-                false
+                false,
             ),
             (VariationValue::Integer(0), VariationValue::Integer(0), true),
             (VariationValue::Float(0.0), VariationValue::Float(1.0), true),
             (
                 VariationValue::Float(1.0),
                 VariationValue::Float(0.0),
-                false
+                false,
             ),
             (VariationValue::Float(0.0), VariationValue::Float(0.0), true),
             (VariationValue::Integer(0), VariationValue::Float(1.0), true),
             (
                 VariationValue::Integer(1),
                 VariationValue::Float(0.0),
-                false
+                false,
             ),
             (VariationValue::Integer(0), VariationValue::Float(0.0), true),
             (VariationValue::Float(0.0), VariationValue::Integer(1), true),
             (
                 VariationValue::Float(1.0),
                 VariationValue::Integer(0),
-                false
+                false,
             ),
             (VariationValue::Float(0.0), VariationValue::Integer(0), true),
             (
                 VariationValue::String("".into()),
                 VariationValue::Integer(0),
-                false
+                false,
             ),
             (
                 VariationValue::Integer(0),
                 VariationValue::String("".into()),
-                false
+                false,
             ),
             (
                 VariationValue::Boolean(true),
                 VariationValue::Integer(1),
-                false
+                false,
             ),
             (
                 VariationValue::Integer(1),
                 VariationValue::Boolean(true),
-                false
+                false,
             ),
         ];
 
@@ -583,66 +523,66 @@ mod tests {
             (
                 VariationValue::Integer(0),
                 VariationValue::Integer(1),
-                false
+                false,
             ),
             (VariationValue::Integer(1), VariationValue::Integer(0), true),
             (
                 VariationValue::Integer(0),
                 VariationValue::Integer(0),
-                false
+                false,
             ),
             (
                 VariationValue::Float(0.0),
                 VariationValue::Float(1.0),
-                false
+                false,
             ),
             (VariationValue::Float(1.0), VariationValue::Float(0.0), true),
             (
                 VariationValue::Float(0.0),
                 VariationValue::Float(0.0),
-                false
+                false,
             ),
             (
                 VariationValue::Integer(0),
                 VariationValue::Float(1.0),
-                false
+                false,
             ),
             (VariationValue::Integer(1), VariationValue::Float(0.0), true),
             (
                 VariationValue::Integer(0),
                 VariationValue::Float(0.0),
-                false
+                false,
             ),
             (
                 VariationValue::Float(0.0),
                 VariationValue::Integer(1),
-                false
+                false,
             ),
             (VariationValue::Float(1.0), VariationValue::Integer(0), true),
             (
                 VariationValue::Float(0.0),
                 VariationValue::Integer(0),
-                false
+                false,
             ),
             (
                 VariationValue::String("".into()),
                 VariationValue::Integer(0),
-                false
+                false,
             ),
             (
                 VariationValue::Integer(0),
                 VariationValue::String("".into()),
-                false
+                false,
             ),
             (
                 VariationValue::Boolean(true),
                 VariationValue::Integer(1),
-                false
+                false,
             ),
             (
                 VariationValue::Integer(1),
                 VariationValue::Boolean(true),
-                false
+                false,
             ),
         ];
 
@@ -663,50 +603,50 @@ mod tests {
             (
                 VariationValue::Integer(0),
                 VariationValue::Integer(1),
-                false
+                false,
             ),
             (VariationValue::Integer(1), VariationValue::Integer(0), true),
             (VariationValue::Integer(0), VariationValue::Integer(0), true),
             (
                 VariationValue::Float(0.0),
                 VariationValue::Float(1.0),
-                false
+                false,
             ),
             (VariationValue::Float(1.0), VariationValue::Float(0.0), true),
             (VariationValue::Float(0.0), VariationValue::Float(0.0), true),
             (
                 VariationValue::Integer(0),
                 VariationValue::Float(1.0),
-                false
+                false,
             ),
             (VariationValue::Integer(1), VariationValue::Float(0.0), true),
             (VariationValue::Integer(0), VariationValue::Float(0.0), true),
             (
                 VariationValue::Float(0.0),
                 VariationValue::Integer(1),
-                false
+                false,
             ),
             (VariationValue::Float(1.0), VariationValue::Integer(0), true),
             (VariationValue::Float(0.0), VariationValue::Integer(0), true),
             (
                 VariationValue::String("".into()),
                 VariationValue::Integer(0),
-                false
+                false,
             ),
             (
                 VariationValue::Integer(0),
                 VariationValue::String("".into()),
-                false
+                false,
             ),
             (
                 VariationValue::Boolean(true),
                 VariationValue::Integer(1),
-                false
+                false,
             ),
             (
                 VariationValue::Integer(1),
                 VariationValue::Boolean(true),
-                false
+                false,
             ),
         ];
 
@@ -728,63 +668,63 @@ mod tests {
             (
                 VariationValue::Integer(1),
                 VariationValue::Integer(0),
-                false
+                false,
             ),
             (
                 VariationValue::Integer(1),
                 VariationValue::Integer(1),
-                false
+                false,
             ),
             (
                 VariationValue::String("0".into()),
                 VariationValue::String("1".into()),
-                true
+                true,
             ),
             (
                 VariationValue::String("1".into()),
                 VariationValue::String("0".into()),
-                false
+                false,
             ),
             (
                 VariationValue::String("1".into()),
                 VariationValue::String("1".into()),
-                false
+                false,
             ),
             (VariationValue::Float(0.0), VariationValue::Float(1.0), true),
             (
                 VariationValue::Float(1.0),
                 VariationValue::Float(0.0),
-                false
+                false,
             ),
             (
                 VariationValue::Float(1.0),
                 VariationValue::Float(1.0),
-                false
+                false,
             ),
             (
                 VariationValue::String("1970-01-01T00:00:01Z".into()),
                 VariationValue::String("1970-01-01T00:00:02Z".into()),
-                true
+                true,
             ),
             (
                 VariationValue::String("1970-01-01T00:00:01Z".into()),
                 VariationValue::String("1970-01-01T00:00:01.0001Z".into()),
-                true
+                true,
             ),
             (
                 VariationValue::Integer(0),
                 VariationValue::String("1970-01-01T00:00:00.0001Z".into()),
-                true
+                true,
             ),
             (
                 VariationValue::Float(0.0),
                 VariationValue::String("1970-01-01T00:00:00.0001Z".into()),
-                true
+                true,
             ),
             (
                 VariationValue::Integer(0),
                 VariationValue::String("1970-01-01----00:00:00.0001Z".into()),
-                false
+                false,
             ),
         ];
 
@@ -805,64 +745,64 @@ mod tests {
             (
                 VariationValue::Integer(0),
                 VariationValue::Integer(1),
-                false
+                false,
             ),
             (VariationValue::Integer(1), VariationValue::Integer(0), true),
             (
                 VariationValue::Integer(1),
                 VariationValue::Integer(1),
-                false
+                false,
             ),
             (
                 VariationValue::String("0".into()),
                 VariationValue::String("1".into()),
-                false
+                false,
             ),
             (
                 VariationValue::String("1".into()),
                 VariationValue::String("0".into()),
-                true
+                true,
             ),
             (
                 VariationValue::String("1".into()),
                 VariationValue::String("1".into()),
-                false
+                false,
             ),
             (
                 VariationValue::Float(0.0),
                 VariationValue::Float(1.0),
-                false
+                false,
             ),
             (VariationValue::Float(1.0), VariationValue::Float(0.0), true),
             (
                 VariationValue::Float(1.0),
                 VariationValue::Float(1.0),
-                false
+                false,
             ),
             (
                 VariationValue::String("1970-01-01T00:00:01Z".into()),
                 VariationValue::String("1970-01-01T00:00:02Z".into()),
-                false
+                false,
             ),
             (
                 VariationValue::String("1970-01-01T00:00:01Z".into()),
                 VariationValue::String("1970-01-01T00:00:01.0001Z".into()),
-                false
+                false,
             ),
             (
                 VariationValue::Integer(0),
                 VariationValue::String("1970-01-01T00:00:00.0001Z".into()),
-                false
+                false,
             ),
             (
                 VariationValue::Float(0.0),
                 VariationValue::String("1970-01-01T00:00:00.0001Z".into()),
-                false
+                false,
             ),
             (
                 VariationValue::Integer(0),
                 VariationValue::String("1970-01-01----00:00:00.0001Z".into()),
-                false
+                false,
             ),
         ];
 
